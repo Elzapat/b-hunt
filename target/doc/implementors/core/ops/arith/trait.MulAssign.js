@@ -1,3 +1,0 @@
-(function() {var implementors = {};
-implementors["sfml"] = [{"text":"impl MulAssign&lt;Color&gt; for Color","synthetic":false,"types":[]},{"text":"impl MulAssign&lt;f32&gt; for Time","synthetic":false,"types":[]},{"text":"impl MulAssign&lt;i64&gt; for Time","synthetic":false,"types":[]},{"text":"impl&lt;T:&nbsp;MulAssign + Copy&gt; MulAssign&lt;T&gt; for Vector2&lt;T&gt;","synthetic":false,"types":[]},{"text":"impl&lt;T:&nbsp;MulAssign + Copy&gt; MulAssign&lt;T&gt; for Vector3&lt;T&gt;","synthetic":false,"types":[]}];
-if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

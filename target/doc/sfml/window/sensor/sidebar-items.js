@@ -1,1 +1,0 @@
-initSidebarItems({"enum":[["Type","Sensor type."]],"fn":[["is_available","Check if a sensor is available on the underlying platform."],["set_enabled","Enable or disable a sensor."],["value","Get the current sensor value."]]});
