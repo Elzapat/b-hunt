@@ -1,39 +1,43 @@
-extern crate sfml;
+use ggez;
+use ggez::event;
+use ggez::graphics;
+use ggez::{Context, GameResult};
 
-use sfml::graphics::*;
-use sfml::window::*;
-use sfml::system::*;
+mod map; use map::*;
 
-mod resource_manager; use resource_manager::*;
+struct MainState {
+    map: Map,
+}
 
-fn main() {
-
-//    let mut tex_holder = ResourceManager::<&str, Texture>::new();
- //   tex_holder.load("map", "resources/map.png");
-
-    let background = Texture::from_file("resources/map.png").unwrap();
-    let mut window = RenderWindow::new(
-        (800, 600),
-        "Fabi Pew Pew",
-        Style::CLOSE,
-        &Default::default(),
-    );
-
-    window.set_framerate_limit(30);
-
-    let mut i = 0.0;
-    while window.is_open() {
-        while let Some(e) = window.poll_event() {
-            match e {
-                Event::Closed => window.close(),
-                _ => {},
-            }
-        }
-
-        window.clear(Color::BLACK);
-        window.draw(&Sprite::with_texture(&background));
-        window.set_view(&View::new(Vector2f::new(i, 100.0), Vector2f::new(100.0, 100.0)));
-        window.display();
-        i += 1.0;
+impl MainState {
+    fn new (ctx: &mut Context) -> GameResult<MainState> {
+        let map = Map::new(ctx, 800, 600);
+    
+        let s = MainState {
+            map: map,
+        };
+        Ok(s)
     }
+}
+
+impl event::EventHandler for MainState {
+    fn update(&mut self, _ctx: &mut ggez::Context) -> ggez::GameResult {
+        Ok(())
+    }
+
+    fn draw(&mut self, mut ctx: &mut ggez::Context) -> ggez::GameResult {
+        graphics::clear(ctx, [0.1, 0.2, 0.3, 1.0].into());
+
+        self.map.draw(ctx)?;
+
+        graphics::present(&mut ctx)?;
+        Ok(())
+    }
+}
+
+pub fn main() -> ggez::GameResult {
+    let cb = ggez::ContextBuilder::new("super_simple", "ggez");
+    let (ctx, event_loop) = &mut cb.build()?;
+    let state = &mut MainState::new(ctx)?;
+    event::run(ctx, event_loop, state)
 }

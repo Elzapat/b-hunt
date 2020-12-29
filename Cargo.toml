@@ -1,9 +1,10 @@
 [package]
-name = "fabi_pew_pew"
+name = "b-hunt"
 version = "0.1.0"
 authors = ["Morgan Van Amerongen <mistigri.van@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-sfml = "*"
+ggez = "0.5.1"
+cgmath = { version = "0.17", features = ["mint"]}
 rand = "0.8.0"
