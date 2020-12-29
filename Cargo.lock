@@ -105,6 +105,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
+name = "b-hunt"
+version = "0.1.0"
+dependencies = [
+ "cgmath",
+ "ggez",
+ "rand 0.8.0",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -542,15 +551,6 @@ dependencies = [
  "proc-macro2 0.4.30",
  "quote 0.6.13",
  "syn 0.15.44",
-]
-
-[[package]]
-name = "fabi_pew_pew"
-version = "0.1.0"
-dependencies = [
- "cgmath",
- "ggez",
- "rand 0.8.0",
 ]
 
 [[package]]
