@@ -1,0 +1,4 @@
+(function() {var implementors = {};
+implementors["sfml"] = [{"text":"impl ToOwned for SoundBuffer","synthetic":false,"types":[]},{"text":"impl ToOwned for Font","synthetic":false,"types":[]},{"text":"impl ToOwned for Texture","synthetic":false,"types":[]},{"text":"impl ToOwned for View","synthetic":false,"types":[]}];
+implementors["widestring"] = [{"text":"impl&lt;C:&nbsp;UChar&gt; ToOwned for UCStr&lt;C&gt;","synthetic":false,"types":[]},{"text":"impl&lt;C:&nbsp;UChar&gt; ToOwned for UStr&lt;C&gt;","synthetic":false,"types":[]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["desktop_position","Get the current position of a touch in desktop coordinates."],["is_down","Check if a touch event is currently down."]]});

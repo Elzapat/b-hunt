@@ -1,0 +1,17 @@
+var N = null;var sourcesIndex = {};
+sourcesIndex["bitflags"] = {"name":"","files":["lib.rs"]};
+sourcesIndex["cfg_if"] = {"name":"","files":["lib.rs"]};
+sourcesIndex["csfml_audio_sys"] = {"name":"","files":["lib.rs"]};
+sourcesIndex["csfml_graphics_sys"] = {"name":"","files":["lib.rs"]};
+sourcesIndex["csfml_system_sys"] = {"name":"","files":["lib.rs"]};
+sourcesIndex["csfml_window_sys"] = {"name":"","files":["lib.rs"]};
+sourcesIndex["fabi_pew_pew"] = {"name":"","files":["main.rs"]};
+sourcesIndex["getrandom"] = {"name":"","files":["error.rs","error_impls.rs","lib.rs","linux_android.rs","use_file.rs","util.rs","util_libc.rs"]};
+sourcesIndex["libc"] = {"name":"","dirs":[{"name":"unix","dirs":[{"name":"linux_like","dirs":[{"name":"linux","dirs":[{"name":"gnu","dirs":[{"name":"b64","dirs":[{"name":"x86_64","files":["align.rs","mod.rs","not_x32.rs"]}],"files":["mod.rs"]}],"files":["align.rs","mod.rs"]}],"files":["align.rs","mod.rs"]}],"files":["mod.rs"]}],"files":["align.rs","mod.rs"]}],"files":["fixed_width_ints.rs","lib.rs","macros.rs"]};
+sourcesIndex["ppv_lite86"] = {"name":"","dirs":[{"name":"x86_64","files":["mod.rs","sse2.rs"]}],"files":["lib.rs","soft.rs","types.rs"]};
+sourcesIndex["rand"] = {"name":"","dirs":[{"name":"distributions","files":["bernoulli.rs","float.rs","integer.rs","mod.rs","other.rs","uniform.rs","utils.rs","weighted.rs","weighted_index.rs"]},{"name":"rngs","dirs":[{"name":"adapter","files":["mod.rs","read.rs","reseeding.rs"]}],"files":["mock.rs","mod.rs","std.rs","thread.rs"]},{"name":"seq","files":["index.rs","mod.rs"]}],"files":["lib.rs","prelude.rs","rng.rs"]};
+sourcesIndex["rand_chacha"] = {"name":"","files":["chacha.rs","guts.rs","lib.rs"]};
+sourcesIndex["rand_core"] = {"name":"","files":["block.rs","error.rs","impls.rs","le.rs","lib.rs","os.rs"]};
+sourcesIndex["sfml"] = {"name":"","dirs":[{"name":"audio","files":["capture.rs","listener.rs","mod.rs","music.rs","sound.rs","sound_buffer.rs","sound_source.rs","sound_status.rs","sound_stream.rs","time_span.rs"]},{"name":"graphics","files":["blend_mode.rs","circle_shape.rs","color.rs","convex_shape.rs","custom_shape.rs","drawable.rs","font.rs","glsl.rs","glyph.rs","image.rs","mod.rs","primitive_type.rs","rect.rs","rectangle_shape.rs","render_states.rs","render_target.rs","render_texture.rs","render_window.rs","shader.rs","shape.rs","sprite.rs","text.rs","text_style.rs","texture.rs","transform.rs","transformable.rs","vertex.rs","vertex_array.rs","view.rs"]},{"name":"system","files":["clock.rs","mod.rs","sf_box.rs","sleep.rs","string.rs","time.rs","vector2.rs","vector3.rs"]},{"name":"window","files":["clipboard.rs","context.rs","context_settings.rs","event.rs","joystick.rs","keyboard.rs","mod.rs","mouse.rs","sensor.rs","style.rs","touch.rs","video_mode.rs","window.rs"]}],"files":["inputstream.rs","lib.rs","sf_bool_ext.rs"]};
+sourcesIndex["widestring"] = {"name":"","dirs":[{"name":"platform","files":["mod.rs","other.rs"]}],"files":["lib.rs","ucstr.rs","ucstring.rs","ustr.rs","ustring.rs"]};
+createSourceSidebar();

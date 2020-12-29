@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["sfml"] = [{"text":"impl SubAssign&lt;Color&gt; for Color","synthetic":false,"types":[]},{"text":"impl SubAssign&lt;TextStyle&gt; for TextStyle","synthetic":false,"types":[]},{"text":"impl SubAssign&lt;Time&gt; for Time","synthetic":false,"types":[]},{"text":"impl&lt;T:&nbsp;SubAssign&gt; SubAssign&lt;Vector2&lt;T&gt;&gt; for Vector2&lt;T&gt;","synthetic":false,"types":[]},{"text":"impl&lt;T:&nbsp;SubAssign&gt; SubAssign&lt;Vector3&lt;T&gt;&gt; for Vector3&lt;T&gt;","synthetic":false,"types":[]},{"text":"impl SubAssign&lt;Style&gt; for Style","synthetic":false,"types":[]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

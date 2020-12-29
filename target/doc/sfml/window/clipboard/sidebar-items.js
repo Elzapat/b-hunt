@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["get_string","Get the content of the clipboard as string data."],["set_string","Set the content of the clipboard as string data."]]});

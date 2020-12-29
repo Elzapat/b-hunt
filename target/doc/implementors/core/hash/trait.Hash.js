@@ -1,0 +1,4 @@
+(function() {var implementors = {};
+implementors["sfml"] = [{"text":"impl Hash for PrimitiveType","synthetic":false,"types":[]},{"text":"impl Hash for TextStyle","synthetic":false,"types":[]},{"text":"impl Hash for Key","synthetic":false,"types":[]},{"text":"impl Hash for Style","synthetic":false,"types":[]}];
+implementors["widestring"] = [{"text":"impl&lt;C:&nbsp;Hash + UChar&gt; Hash for UCStr&lt;C&gt;","synthetic":false,"types":[]},{"text":"impl&lt;C:&nbsp;Hash + UChar&gt; Hash for UCString&lt;C&gt;","synthetic":false,"types":[]},{"text":"impl&lt;C:&nbsp;Hash + UChar&gt; Hash for UStr&lt;C&gt;","synthetic":false,"types":[]},{"text":"impl&lt;C:&nbsp;Hash + UChar&gt; Hash for UString&lt;C&gt;","synthetic":false,"types":[]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

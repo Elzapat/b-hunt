@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Equation","Enumeration of the blending equations."],["Factor","Enumeration of the blending factors."]],"struct":[["BlendMode","Blending modes for drawing."]]});

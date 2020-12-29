@@ -1,0 +1,9 @@
+[package]
+name = "fabi_pew_pew"
+version = "0.1.0"
+authors = ["Morgan Van Amerongen <mistigri.van@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+sfml = "*"
+rand = "0.8.0"
