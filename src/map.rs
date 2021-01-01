@@ -1,32 +1,28 @@
 use ggez::graphics;
-use ggez::graphics::Rect;
+use ggez::graphics::spritebatch;
+use ggez::nalgebra::Point2;
 use ggez::{Context, GameResult};
 use rand::Rng;
 
-type Vector2 = cgmath::Vector2<f32>;
-type Point2 = cgmath::Point2<f32>;
-
 struct Sprite {
-    image: graphics::Image,
-    scale: Vector2,
-    bounding_box: Rect,
+    image: spritebatch::SpriteBatch,
+    width: u16,
+    height: u16
 }
 
 pub struct Map {
-    width: u32,
-    height: u32,
+    width: f32,
+    height: f32,
     background: graphics::Mesh,
-    nature: Vec<Sprite>,
+    nature: Vec<Sprite>
 }
 
 impl Map {
-    pub fn new(ctx: &mut Context, width: u32, height: u32) -> GameResult<Map> {
-        const NB_TREES: u32 = 30;
-        const NB_GRASS: u32 = 1000;
-        const TREE_RANGE: u32 = 1;
-        const GRASS_RANGE: u32 = 4;
+    pub fn new(ctx: &mut Context, width: f32, height: f32) -> GameResult<Map> {
+        const NUMBERS_OF: [u16; 2] = [1000, 30];
+        let environment = ["grass", "tree"];
+        let ranges: [u16; 2] = [4, 1];
 
-        let mut nature = vec![];
         let background = graphics::Mesh::new_polygon(
             ctx,
             graphics::DrawMode::fill(),
@@ -35,26 +31,26 @@ impl Map {
             graphics::Color::from_rgb(104, 159, 56)
         )?;
 
-        for i in 0..NB_TREES + NB_GRASS {
-            let image: graphics::Image;
-            match i {
-                0..=NB_TREES => {
-                    image = graphics::Image::new(ctx, format!("/tree-{}.png", rand(TREE_RANGE)))?;
-                },
-                _ => {
-                    image = graphics::Image::new(ctx, format!("/grass-{}.png", rand(GRASS_RANGE)))?;
-                },
+        let mut nature = vec![];
+        for (i, env) in environment.iter().enumerate() {
+            for id in 0..=ranges[i] {
+                let image = graphics::Image::new(ctx, format!("/{}_{}.png", env, id))?;
+                let (sprite_width, sprite_height) = (image.width(), image.height());
+                let mut spritebatch = spritebatch::SpriteBatch::new(image);
+                for _ in 0..NUMBERS_OF[i] {
+                    let param = graphics::DrawParam::new()
+                        .dest(Point2::new(rand(width), rand(height)));
+                    spritebatch.add(param);
+                }
+                let mut sprite = Sprite {
+                    width: sprite_width,
+                    height: sprite_height,
+                    image: spritebatch
+                };
+                let param = graphics::DrawParam::new();
+                sprite.image.add(param);
+                nature.push(sprite);
             }
-            nature.push(Sprite {
-                bounding_box: Rect::new(
-                    rand(width),
-                    rand(height),
-                    image.width() as f32,
-                    image.height() as f32
-                ),
-                image: image,
-                scale: Vector2::new(3.0, 3.0),
-            }); 
         }
 
         let map = Map {
@@ -68,18 +64,19 @@ impl Map {
     }
 
     pub fn draw(&self, mut ctx: &mut Context) -> ggez::GameResult {
-        graphics::draw(&mut ctx, &self.background, (Point2::new(0.0, 0.0),))?; 
+        graphics::draw(&mut ctx, &self.background, (cgmath::Point2::<f32>::new(0.0, 0.0),))?; 
 
         for thing in self.nature.iter() {
-            graphics::draw(ctx, &thing.image, (Point2::new(
-                        thing.bounding_box.x as f32, thing.bounding_box.y as f32),))?;
+            let param = graphics::DrawParam::new()
+                .dest(Point2::new(0.0, 0.0));
+            graphics::draw(ctx, &thing.image, param)?; 
         }
 
         Ok(())
     }
 }
 
-fn rand(max: u32) -> f32 {
+fn rand(max: f32) -> f32 {
     let mut rng = rand::thread_rng();
     let random_f: f64 = rng.gen();
     (random_f * max as f64).round() as f32 
