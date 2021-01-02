@@ -1,5 +1,5 @@
 #[derive(PartialEq)]
-enum Movement {
+pub enum Movement {
     Up,
     Down,
     Right,

@@ -6,8 +6,8 @@ use ggez::event;
 use ggez::event::KeyCode;
 use std::collections::{HashMap, VecDeque};
 
-mod utils; use utils::Movement;
-mod bullet; use bullet::*;
+use crate::utils::Movement;
+use crate::bullet::Bullet;
 
 // Fabien is the player
 pub struct Fabien {
@@ -22,7 +22,7 @@ pub struct Fabien {
     speed: f32,
     movement_queue: VecDeque<Movement>,
     map_size: (f32, f32),
-    shots: Vec<Bullet>
+    shots: VecDeque<Bullet>
 }
 
 impl Fabien {
@@ -51,7 +51,7 @@ impl Fabien {
             speed: 0.8,
             movement_queue: VecDeque::new(),
             map_size: (width, height),
-            shots: Vec<Bullet>::new()
+            shots: VecDeque::<Bullet>::new()
         };
 
         Ok(fabien)
@@ -74,9 +74,13 @@ impl Fabien {
                 self.animation_cycle = 2;
             } else { self.animation_cycle = 3; }
         } else if self.shooting.0 { self.animation_cycle = 4; }
-        else { self.animation_ cycle = 0; }
+        else { self.animation_cycle = 0; }
 
-        if self.shooting.0 { self.shots.iter().map(|b| b.draw()); }
+        if self.shots.len() > 0 {
+            for b in self.shots.iter_mut() {
+                b.draw(ctx)?;
+            }
+        }
 
         let sprite = self.sprites.get(&format!("{}_{}", self.facing, self.animation_cycle)).unwrap();
         graphics::draw(ctx, sprite, (Point2::new(self.hitbox.x, self.hitbox.y),))?;
@@ -132,16 +136,22 @@ impl Fabien {
             CAMERA_SIZE.1
         ))?;
 
-        if self.shooting.0 { 
-            self.shooting.1 += 1;
-            self.shots.iter().map(|b| b.update());
+        if self.shooting.0 { self.shooting.1 += 1; }
+        if self.shots.len() > 0 {
+            let mut to_remove = vec![];
+            for (i, b) in self.shots.iter_mut().enumerate() {
+                if !b.update() { to_remove.push(i); }
+            }
+            for x in to_remove.iter() {
+                self.shots.remove(*x);
+            }
         }
         if self.shooting.1 > 25 { self.shooting.0 = false; self.shooting.1 = 0; }
 
         Ok(())
     }
 
-    pub fn key_down_event(&mut self, keycode: KeyCode) {
+    pub fn key_down_event(&mut self, keycode: KeyCode, ctx: &mut Context) {
         match keycode {
             KeyCode::Z => self.movement_queue.push_back(Movement::Up),
             KeyCode::Q => self.movement_queue.push_back(Movement::Left),
@@ -152,24 +162,25 @@ impl Fabien {
                     self.shooting.0 = true;
                     self.ammos -= 1;
 
-                    const BULLET_SPEED: f32 = 3.0;
-                    let (mov, pos) = match self.facing {
-                        "front".to_string() => (Movement::Down, (self.hitbox.x + 2.0, self.hitbox.y + 8.0))
-                        "back".to_string() => (Movement::Up, (self.hitbox. + 7.0, self.hitbox.y + 9.0))
-                        "left".to_string() => (Movement::Left, (self.hitbox.x, self.hitbox.y + 8.0))
-                        "right".to_string() => (Movement::Right, (self.hitbox.x + 11.0, self.hitbox.y + 8.0))
-                        _ => {}
+                    const BULLET_SPEED: f32 = 3.5;
+                    let (mov, pos) = match &self.facing[..] {
+                        "front" => (Movement::Down, (self.hitbox.x + 1.0, self.hitbox.y + 8.0)),
+                        "back" => (Movement::Up, (self.hitbox.x + 6.0, self.hitbox.y + 9.0)),
+                        "left" => (Movement::Left, (self.hitbox.x, self.hitbox.y + 7.0)),
+                        "right" => (Movement::Right, (self.hitbox.x + 11.0, self.hitbox.y + 7.0)),
+                        _ => (Movement::Down, (0.0, 0.0))
                     };
 
                     let bullet = Bullet::new(
                         ctx,
                         BULLET_SPEED,
                         mov,
-                        Rect::new(pos.0, pos.1, 3.0, 2.0),
+                        Rect::new(pos.0, pos.1, 1.0, 1.0),
+                        100,
                         self.map_size
-                    );
+                    ).unwrap();
 
-                    self.shots.push(bullet);
+                    self.shots.push_back(bullet);
                 }
             },
             _ => {}

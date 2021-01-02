@@ -4,8 +4,10 @@ use ggez::graphics;
 use ggez::{Context, GameResult};
 use ggez::event::*;
 
-mod map; use map::*;
-mod fabien; use fabien::*;
+mod map; use map::Map;
+mod fabien; use fabien::Fabien;
+pub mod utils;
+pub mod bullet;
 
 enum GameState {
     Menu,
@@ -51,8 +53,8 @@ impl event::EventHandler for MainState {
         Ok(())
     }
 
-    fn key_down_event(&mut self, _ctx: &mut Context, keycode: KeyCode, _keymod: KeyMods, _repeat: bool) {
-        self.fabien.key_down_event(keycode);
+    fn key_down_event(&mut self, ctx: &mut Context, keycode: KeyCode, _keymod: KeyMods, _repeat: bool) {
+        self.fabien.key_down_event(keycode, ctx);
     }
     
     fn key_up_event(&mut self, _ctx: &mut Context, keycode: KeyCode, _keymod: KeyMods) {
