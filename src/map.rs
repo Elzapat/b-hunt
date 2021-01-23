@@ -1,8 +1,10 @@
-use ggez::graphics;
-use ggez::graphics::spritebatch;
-use ggez::nalgebra::Point2;
-use ggez::{Context, GameResult};
-use rand::Rng;
+use ggez::{
+    graphics, Context, GameResult,
+    graphics::{ spritebatch, Rect },
+    nalgebra::Point2
+};
+
+use crate::utils::rand;
 
 struct Sprite {
     image: spritebatch::SpriteBatch,
@@ -14,7 +16,8 @@ pub struct Map {
     width: f32,
     height: f32,
     background: graphics::Mesh,
-    nature: Vec<Sprite>
+    nature: Vec<Sprite>,
+    hitboxes: Vec<Rect>
 }
 
 impl Map {
@@ -22,6 +25,7 @@ impl Map {
         const NUMBERS_OF: [u16; 2] = [1000, 30];
         let environment = ["grass", "tree"];
         let ranges: [u16; 2] = [4, 1];
+        let mut hitboxes = vec![];
 
         let background = graphics::Mesh::new_polygon(
             ctx,
@@ -38,8 +42,13 @@ impl Map {
                 let (sprite_width, sprite_height) = (image.width(), image.height());
                 let mut spritebatch = spritebatch::SpriteBatch::new(image);
                 for _ in 0..NUMBERS_OF[i] {
+                    let x = rand(width);
+                    let y = rand(height);
+
+                    hitboxes.push(Rect::new(x, y, sprite_width as f32, sprite_height as f32));
+
                     let param = graphics::DrawParam::new()
-                        .dest(Point2::new(rand(width), rand(height)));
+                        .dest(Point2::new(x, y));
                     spritebatch.add(param);
                 }
                 let mut sprite = Sprite {
@@ -57,7 +66,8 @@ impl Map {
             width: width,
             height: height,
             background: background,
-            nature: nature
+            nature: nature,
+            hitboxes: hitboxes
         };
 
         Ok(map)
@@ -74,10 +84,16 @@ impl Map {
 
         Ok(())
     }
-}
 
-fn rand(max: f32) -> f32 {
-    let mut rng = rand::thread_rng();
-    let random_f: f64 = rng.gen();
-    (random_f * max as f64).round() as f32 
+    pub fn get_width(&self) -> f32 {
+        self.width
+    }
+
+    pub fn get_height(&self) -> f32 {
+        self.height
+    }
+
+    pub fn get_hitboxes(&self) -> &Vec<Rect> {
+        &self.hitboxes
+    }
 }

@@ -1,7 +1,8 @@
-use ggez::{Context, GameResult};
-use ggez::graphics;
-use ggez::nalgebra::Point2;
-use ggez::graphics::Rect;
+use ggez::{
+    Context, GameResult, graphics,
+    nalgebra::Point2,
+    graphics::Rect
+};
 
 use crate::utils::Movement;
 
@@ -45,10 +46,22 @@ impl Bullet {
 
     pub fn update(&mut self) -> bool {
         match self.moving {
-            Movement::Up => self.pos.1 -= self.speed,
-            Movement::Left => self.pos.0 -= self.speed,
-            Movement::Down => self.pos.1 += self.speed,
-            Movement::Right => self.pos.0 += self.speed
+            Movement::Up => {
+                self.pos.1 -= self.speed;
+                self.hitbox.y -= self.speed;
+            },
+            Movement::Left => {
+                self.pos.0 -= self.speed;
+                self.hitbox.x -= self.speed;
+            },
+            Movement::Down => {
+                self.pos.1 += self.speed;
+                self.hitbox.y += self.speed;
+            },
+            Movement::Right => {
+                self.pos.0 += self.speed;
+                self.hitbox.x += self.speed;
+            }
         }
 
         self.life -= 1;
@@ -61,6 +74,10 @@ impl Bullet {
         graphics::draw(ctx, &self.sprite, (Point2::new(self.pos.0, self.pos.1),))?;
 
         Ok(())
+    }
+
+    pub fn get_hitbox(&self) -> Rect {
+        self.hitbox
     }
 }
 
