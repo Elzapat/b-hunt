@@ -268,7 +268,7 @@ pub fn main() -> GameResult {
         icon: "/Fabien_front_0.png".to_string(),
         ..Default::default()
     });
-    let (width, height) = (1200.0, 800.0);
+    let (width, height) = (1000.0, 750.0);
     cb = cb.window_mode(ggez::conf::WindowMode {
         width: width,
         height: height,
