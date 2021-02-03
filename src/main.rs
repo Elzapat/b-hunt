@@ -3,12 +3,15 @@ mod fabien; use fabien::Fabien;
 mod bertrand; use bertrand::Bertrand;
 mod menu; use menu::Menu;
 mod game_over; use game_over::GameOver;
+pub mod powerup; use powerup::{ Powerup, Powerups };
 pub mod utils; use utils::*;
 pub mod bullet;
+pub mod particle;
+pub mod particle_system;
 
 use ggez::{
     event, graphics, Context, GameResult,
-    graphics::{ Rect, Drawable },
+    graphics::Rect,
     event::*,
 };
 use std::io::prelude::*;
@@ -28,7 +31,9 @@ struct MainState {
     map: Map,
     fabien: Fabien,
     bertrands: Vec<Bertrand>,
+    powerups: Vec<Powerup>,
     sec_since_last_bertrand: f64,
+    sec_since_last_powerup: f64,
     time_passed: f64,
     frames: u32,
     wave: u32
@@ -49,7 +54,9 @@ impl MainState {
             map: map,
             fabien: fabien,
             bertrands: Vec::<Bertrand>::new(),
+            powerups: Vec::<Powerup>::new(),
             sec_since_last_bertrand: 0.0,
+            sec_since_last_powerup: 0.0,
             time_passed: 0.0,
             frames: 0,
             wave: 1
@@ -61,16 +68,27 @@ impl MainState {
         let fabien_hitbox = self.fabien.get_hitbox();
 
         // Check if any Bertrand is colliding with any of Fabien's bullets
+        // and let the bullet go through if Fabien has the powerup for that
         let mut nb_removed = 0;
         {
-            let shots = self.fabien.get_shots(); 
-            for bullet in shots.iter() {
+            let mut nb_go_through = 0;
+            if let Some(Powerups::PiercingBullet((_, nb))) = self.fabien.get_active_powerup() {
+                nb_go_through = nb;
+            }
+            use std::collections::VecDeque;
+            use crate::bullet::Bullet;
+            let shots: &mut VecDeque<Bullet> = self.fabien.get_shots(); 
+            for bullet in shots.iter_mut() {
+                let mut nb_through = nb_go_through as i32;
                 self.bertrands.retain(|bertrand| { 
                     if bertrand.get_hitbox().overlaps(&bullet.get_hitbox()) {
                         nb_removed += 1;
+                        nb_through -= 1;
                         false 
                     } else { true }
                 });
+
+                if nb_through < 0 { bullet.set_life(0); }
             }
         }
         self.fabien.add_to_score(nb_removed);
@@ -80,14 +98,25 @@ impl MainState {
         // a function on Fabien if they're colliding, and retain won't let me
         // do that.
         // self.bertrands.retain(|bertrand| bertrand.get_hitbox().overlaps(&fabien_hitbox));
-        let mut to_remove = vec![];
+        let mut to_remove: Option<usize> = None;
         for (i, bertrand) in self.bertrands.iter_mut().enumerate() {
             if bertrand.get_hitbox().overlaps(&fabien_hitbox) {
                 self.fabien.take_hit();
-                to_remove.push(i);
+                to_remove = Some(i);
+                break;
             }
         }
-        for x in to_remove.iter() { self.bertrands.remove(*x); }
+        if let Some(x) = to_remove { self.bertrands.remove(x); }
+
+        // Check if Fabien is colliding with a powerup
+        for (i, powerup) in self.powerups.iter().enumerate() {
+            if powerup.get_hitbox().overlaps(&fabien_hitbox) {
+                self.fabien.activate_powerup(powerup.get_powerup());
+                println!("Powerup activated");
+                to_remove = Some(i);
+            }
+        }
+        if let Some(x) = to_remove { self.powerups.remove(x); }
     }
 
     fn write_score(&self) -> u32 {
@@ -148,6 +177,21 @@ impl MainState {
 
         Ok(())
     }
+
+    fn powerup_spawning(&mut self, ctx: &mut Context, fps: f64) -> GameResult {
+        self.sec_since_last_powerup += 1.0 / fps;
+        const POWERUP_SPAWN_RATE: f32 = 100.0;
+
+        let rand_nb = rand(POWERUP_SPAWN_RATE) as f64;
+
+        if rand_nb - self.sec_since_last_powerup < 0.0 {
+            println!("Powerup spawned");
+            self.powerups.push(Powerup::new(ctx, self.screen_size)?);
+            self.sec_since_last_powerup = 0.0;
+        }
+
+        Ok(())
+    }
 }
 
 impl event::EventHandler for MainState {
@@ -157,16 +201,21 @@ impl event::EventHandler for MainState {
                 self.menu.update();
             },
             GameState::Playing => {
+                let fps = ggez::timer::fps(ctx);
+
                 self.check_collisions();
-                self.fabien.update(ctx)?;
+                self.fabien.update(ctx, fps)?;
                 for b in self.bertrands.iter_mut() {
                     b.update((self.fabien.get_hitbox().x, self.fabien.get_hitbox().y))?;
                 }
+                for p in self.powerups.iter_mut() {
+                    p.update(ctx, self.time_passed, fps)?;
+                }
 
-                let fps = ggez::timer::fps(ctx);
                 self.time_passed += 1.0 / fps;
 
                 self.bertrand_spawning(ctx, fps)?;
+                self.powerup_spawning(ctx, fps)?;
 
                 // Check if Fabien is dead, if so it's Game Over
                 if self.fabien.get_health() <= 0 {
@@ -205,10 +254,13 @@ impl event::EventHandler for MainState {
             },
             GameState::Playing => {
                 self.map.draw(ctx)?;
-                self.fabien.draw(ctx, &self.frames, &self.screen_size)?;
+                for p in self.powerups.iter() {
+                    p.draw(ctx)?;
+                }
                 for b in self.bertrands.iter_mut() {
                     b.draw(ctx)?;
                 }
+                self.fabien.draw(ctx, &self.frames, &self.screen_size)?;
 
                 self.frames = (self.frames + 1) % 40;
             },

@@ -8,8 +8,6 @@ use crate::utils::rand;
 
 struct Sprite {
     image: spritebatch::SpriteBatch,
-    width: u16,
-    height: u16
 }
 
 pub struct Map {
@@ -52,8 +50,6 @@ impl Map {
                     spritebatch.add(param);
                 }
                 let mut sprite = Sprite {
-                    width: sprite_width,
-                    height: sprite_height,
                     image: spritebatch
                 };
                 let param = graphics::DrawParam::new();

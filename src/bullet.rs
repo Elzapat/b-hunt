@@ -12,17 +12,17 @@ pub struct Bullet {
     moving: Movement,
     hitbox: Rect,
     pos: (f32, f32),
-    map_size: (f32, f32),
-    life: u32
+    life: i32
 }
 
 impl Bullet {
-    pub fn new(ctx: &mut Context,
-               speed: f32,
-               moving: Movement,
-               hitbox: Rect,
-               life: u32,
-               map_size: (f32, f32)) -> GameResult<Bullet> {
+    pub fn new(
+        ctx: &mut Context,
+        speed: f32,
+        moving: Movement,
+        hitbox: Rect,
+        life: i32
+    ) -> GameResult<Bullet> {
 
         let sprite = graphics::Mesh::new_rectangle(
             ctx,
@@ -37,7 +37,6 @@ impl Bullet {
             moving: moving,
             hitbox: hitbox,
             pos: (0.0, 0.0),
-            map_size: map_size,
             life: life
         };
 
@@ -78,6 +77,10 @@ impl Bullet {
 
     pub fn get_hitbox(&self) -> Rect {
         self.hitbox
+    }
+
+    pub fn set_life(&mut self, new_life: i32) {
+        self.life = new_life;
     }
 }
 

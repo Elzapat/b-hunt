@@ -11,8 +11,8 @@ pub struct Bertrand {
     //sprite: graphics::Mesh,
     sprite: graphics::Image,
     facing: String,
-    hitbox: Rect,
     animation_cycle: u8,
+    hitbox: Rect,
     speed: f32,
 }
 

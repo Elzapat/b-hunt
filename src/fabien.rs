@@ -9,11 +9,14 @@ use ggez::{
 
 use crate::utils::Movement;
 use crate::bullet::Bullet;
+use crate::powerup::Powerups;
 
 // Fabien is the player
 pub struct Fabien {
     sprites: HashMap<String, graphics::Image>,
     bullet_sprite: graphics::Image,
+    sandwich_sprite: graphics::Image,
+    moldy_sandwich_sprite: graphics::Image,
     facing: String,
     hitbox: Rect,
     shooting: (bool, u32),
@@ -25,6 +28,7 @@ pub struct Fabien {
     animation_cycle: u8,
     speed: f32,
     starting_speed: f32,
+    active_powerup: Option<Powerups>,
     movement_queue: VecDeque<Movement>,
     map_size: (f32, f32),
     shots: VecDeque<Bullet>,
@@ -46,10 +50,14 @@ impl Fabien {
         }
 
         let bullet_sprite = graphics::Image::new(ctx, "/bullet.png")?;
+        let sandwich_sprite = graphics::Image::new(ctx, "/sandwich.png")?;
+        let moldy_sandwich_sprite = graphics::Image::new(ctx, "/moldy_sandwich.png")?;
 
         let fabien = Fabien {
             sprites: sprites,
             bullet_sprite: bullet_sprite,
+            sandwich_sprite: sandwich_sprite,
+            moldy_sandwich_sprite: moldy_sandwich_sprite,
             facing: "front".to_string(),
             hitbox: hitbox,
             shooting: (false, 0),
@@ -61,6 +69,7 @@ impl Fabien {
             animation_cycle: 0,
             speed: 0.8,
             starting_speed: 0.8,
+            active_powerup: None,
             movement_queue: VecDeque::new(),
             map_size: (width, height),
             shots: VecDeque::<Bullet>::new(),
@@ -71,7 +80,7 @@ impl Fabien {
     }
 
     pub fn draw(&mut self, ctx: &mut Context, frames: &u32, screen_size: &(f32, f32)) -> GameResult {
-        //Update the invicibility_frames if Fabien is currently invicible
+        // Update the invicibility_frames if Fabien is currently invicible
         if self.invicibility_frames > 0 { self.invicibility_frames -= 1; }
 
         // Update the camera view
@@ -123,33 +132,58 @@ impl Fabien {
         graphics::draw(ctx, sprite, (Point2::new(self.hitbox.x, self.hitbox.y),))?;
 
         // Drawing remaining ammos
-        const BULLET_SCALE: f32 = 0.2;
-        let bullet_width = self.bullet_sprite.width() as f32;
-        let bullet_height = self.bullet_sprite.height() as f32;
-        let mut param = graphics::DrawParam::default()
-            .scale(Vector2::new(0.5, 0.5));
+        {
+            const BULLET_SCALE: f32 = 0.7;
+            const BULLET_SPACING: f32 = BULLET_SCALE / 2.0;
+            let bullet_width = self.bullet_sprite.width() as f32;
+            let bullet_height = self.bullet_sprite.height() as f32;
+            let bullet_origin = (camera_x + 1.0, camera_y + 1.0);
+            let mut param = graphics::DrawParam::default()
+                    .scale(Vector2::new(BULLET_SCALE, BULLET_SCALE));
 
-        camera_x += 1.0;
-        camera_y += 1.0;
-
-        let mut i = 0;
-        let mut j = 0;
-        for _ in 0..self.ammos {
-            param = param.dest(Point2::new(
-                    camera_x + ((bullet_width + 2.0) * BULLET_SCALE) * i as f32,
-                    camera_y + ((bullet_height + 2.0) * BULLET_SCALE) * j as f32
-            ));
-            graphics::draw(ctx, &self.bullet_sprite, param)?;
-            if i % 10 == 0 && i != 0 {
-                i = 0;
-                j += 1;
-            } else { i += 1; }
+            let mut i = 0;
+            let mut j = 0;
+            for _ in 0..self.ammos {
+                param = param.dest(Point2::new(
+                        bullet_origin.0 + (bullet_width * BULLET_SPACING) * i as f32,
+                        bullet_origin.1 + (bullet_height * BULLET_SPACING) * j as f32
+                    ));
+                graphics::draw(ctx, &self.bullet_sprite, param)?;
+                if i % 10 == 0 && i != 0 {
+                    i = 0;
+                    j += 1;
+                } else { i += 1; }
+            }
         }
+
+        // Drawing health
+        {
+            const SANDWICH_SCALE: f32 = 0.065;
+            const SANDWICH_SPACING: f32 = SANDWICH_SCALE / 1.5;
+            let sandwich_width = self.sandwich_sprite.width() as f32;
+            let sandwich_origin = (camera_x + camera_size.0 - 1.0, camera_y - 1.0);
+            let mut param = graphics::DrawParam::default()
+                .scale(Vector2::new(SANDWICH_SCALE, SANDWICH_SCALE));
+
+            for i in (0..self.max_health).rev() {
+                param = param.dest(Point2::new(
+                    sandwich_origin.0 - sandwich_width * SANDWICH_SCALE 
+                        - (sandwich_width * SANDWICH_SPACING) * i as f32,
+                    sandwich_origin.1
+                ));
+                let to_draw = if i + 1 > self.health {
+                    &self.moldy_sandwich_sprite
+                } else { &self.sandwich_sprite };
+
+                graphics::draw(ctx, to_draw, param)?;
+            }
+        }
+
 
         Ok(())
     }
 
-    pub fn update(&mut self, _ctx: &mut Context) -> GameResult {
+    pub fn update(&mut self, _ctx: &mut Context, fps: f64) -> GameResult {
         if self.movement_queue.len() > 0 && !self.shooting.0 {
             match self.movement_queue.back() {
                 Some(Movement::Up) => {
@@ -176,15 +210,29 @@ impl Fabien {
             }
         }
 
+        // Update the time left of the speed boost and piercing bullets powerups
+        match self.active_powerup {
+            Some(Powerups::SpeedBoost((ref mut time_left, _))) => {
+                if time_left <= &mut 0.0 { self.active_powerup = None; }
+                else { *time_left -= 1.0 / fps; }
+            },
+            Some(Powerups::PiercingBullet((ref mut time_left, _))) => {
+                if time_left <= &mut 0.0 { self.active_powerup = None; }
+                else { *time_left -= 1.0 / fps; }
+            },
+            _ => self.speed = self.starting_speed
+        }
+
         if self.shooting.0 { self.shooting.1 += 1; }
         if self.shots.len() > 0 {
-            let mut to_remove = vec![];
+            let mut to_remove: Option<usize> = None;
             for (i, b) in self.shots.iter_mut().enumerate() {
-                if !b.update() { to_remove.push(i); }
+                if !b.update() { 
+                    to_remove = Some(i);
+                    break;
+                }
             }
-            for x in to_remove.iter() {
-                self.shots.remove(*x);
-            }
+            if let Some(x) = to_remove { self.shots.remove(x); }
         }
         if self.shooting.1 > 25 { self.shooting.0 = false; self.shooting.1 = 0; }
 
@@ -200,6 +248,24 @@ impl Fabien {
 
     pub fn add_to_score(&mut self, to_add: u32) {
         self.score += to_add;
+    }
+
+    pub fn activate_powerup(&mut self, powerup: Powerups) {
+        match powerup {
+            Powerups::Heal(health) => {
+                if self.health + health > self.max_health {
+                    self.health = self.max_health;
+                } else {
+                    self.health += health;
+                }
+            },
+            Powerups::AmmoRestock(nb_ammos) => self.ammos += nb_ammos,
+            Powerups::SpeedBoost((_, speed_mult)) => {
+                self.active_powerup = Some(powerup);
+                self.speed *= speed_mult;
+            },
+            Powerups::PiercingBullet(_) => self.active_powerup = Some(powerup)
+        }
     }
 
     pub fn key_down_event(&mut self, keycode: KeyCode, ctx: &mut Context) {
@@ -227,8 +293,7 @@ impl Fabien {
                         BULLET_SPEED,
                         mov,
                         Rect::new(pos.0, pos.1, 1.0, 1.0),
-                        100,
-                        self.map_size
+                        100
                     ).unwrap();
 
                     self.shots.push_back(bullet);
@@ -264,8 +329,8 @@ impl Fabien {
         self.hitbox
     }
 
-    pub fn get_shots(&self) -> &VecDeque<Bullet> {
-        &self.shots
+    pub fn get_shots(&mut self) -> &mut VecDeque<Bullet> {
+        &mut self.shots
     }
 
     pub fn get_health(&self) -> u8 {
@@ -274,5 +339,9 @@ impl Fabien {
 
     pub fn get_score(&self) -> u32 {
         self.score
+    }
+    
+    pub fn get_active_powerup(&self) -> Option<Powerups> {
+        self.active_powerup.clone()
     }
 }
