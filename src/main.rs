@@ -7,7 +7,6 @@ pub mod powerup; use powerup::{ Powerup, Powerups };
 pub mod utils; use utils::*;
 pub mod bullet;
 pub mod particle;
-pub mod particle_system;
 
 use ggez::{
     event, graphics, Context, GameResult,
