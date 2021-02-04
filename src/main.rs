@@ -287,7 +287,7 @@ impl event::EventHandler for MainState {
                 self.game_state = GameState::Playing;
             },
             GameState::Playing => {
-                self.fabien.key_down_event(keycode, ctx);
+                self.fabien.key_down_event(keycode, ctx).unwrap();
             },
             GameState::GameOver => {
                 self.time_passed = 0.0;

@@ -1,15 +1,15 @@
 use std::collections::{ HashMap, VecDeque };
-
+use rand::Rng;
 use ggez::{
     graphics, Context, GameResult,
     nalgebra::{ Point2, Vector2 },
     graphics::Rect,
     event::KeyCode
 };
-
 use crate::utils::Movement;
 use crate::bullet::Bullet;
 use crate::powerup::Powerups;
+use crate::particle::Particle;
 
 // Fabien is the player
 pub struct Fabien {
@@ -32,6 +32,7 @@ pub struct Fabien {
     movement_queue: VecDeque<Movement>,
     map_size: (f32, f32),
     shots: VecDeque<Bullet>,
+    particles: Vec<Particle>,
     invicibility_frames: u32
 }
 
@@ -73,6 +74,7 @@ impl Fabien {
             movement_queue: VecDeque::new(),
             map_size: (width, height),
             shots: VecDeque::<Bullet>::new(),
+            particles: vec![],
             invicibility_frames: 0
         };
 
@@ -179,11 +181,13 @@ impl Fabien {
             }
         }
 
+        // Drawing particles
+        for p in self.particles.iter() { p.draw(ctx)?; }
 
         Ok(())
     }
 
-    pub fn update(&mut self, _ctx: &mut Context, fps: f64) -> GameResult {
+    pub fn update(&mut self, ctx: &mut Context, fps: f64) -> GameResult {
         if self.movement_queue.len() > 0 && !self.shooting.0 {
             match self.movement_queue.back() {
                 Some(Movement::Up) => {
@@ -236,6 +240,10 @@ impl Fabien {
         }
         if self.shooting.1 > 25 { self.shooting.0 = false; self.shooting.1 = 0; }
 
+        // Update the particles
+        for p in self.particles.iter_mut() { p.update(ggez::timer::fps(ctx)); }
+        self.particles.retain(|p| p.is_dead());
+
         Ok(())
     }
 
@@ -268,39 +276,17 @@ impl Fabien {
         }
     }
 
-    pub fn key_down_event(&mut self, keycode: KeyCode, ctx: &mut Context) {
+    pub fn key_down_event(&mut self, keycode: KeyCode, ctx: &mut Context) -> GameResult {
         match keycode {
             KeyCode::Z => self.movement_queue.push_back(Movement::Up),
             KeyCode::Q => self.movement_queue.push_back(Movement::Left),
             KeyCode::S => self.movement_queue.push_back(Movement::Down),
             KeyCode::D => self.movement_queue.push_back(Movement::Right),
-            KeyCode::Space => {
-                if !self.shooting.0 && self.ammos > 0 { 
-                    self.shooting.0 = true;
-                    self.ammos -= 1;
-
-                    const BULLET_SPEED: f32 = 3.0;
-                    let (mov, pos) = match &self.facing[..] {
-                        "front" => (Movement::Down, (self.hitbox.x + 1.0, self.hitbox.y + 8.0)),
-                        "back" => (Movement::Up, (self.hitbox.x + 6.0, self.hitbox.y + 9.0)),
-                        "left" => (Movement::Left, (self.hitbox.x, self.hitbox.y + 7.0)),
-                        "right" => (Movement::Right, (self.hitbox.x + 11.0, self.hitbox.y + 7.0)),
-                        _ => (Movement::Down, (0.0, 0.0))
-                    };
-
-                    let bullet = Bullet::new(
-                        ctx,
-                        BULLET_SPEED,
-                        mov,
-                        Rect::new(pos.0, pos.1, 1.0, 1.0),
-                        100
-                    ).unwrap();
-
-                    self.shots.push_back(bullet);
-                }
-            },
+            KeyCode::Space => { self.shoot(ctx)?; },
             _ => {}
         }
+
+        Ok(())
     }
 
     pub fn key_up_event(&mut self, keycode: KeyCode) {
@@ -311,6 +297,58 @@ impl Fabien {
             KeyCode::D => self.movement_queue.retain(|mov| *mov != Movement::Right),
             _ => {}
         }
+    }
+
+    fn shoot(&mut self, ctx: &mut Context) -> GameResult {
+        if !self.shooting.0 && self.ammos > 0 { 
+            self.shooting.0 = true;
+            self.ammos -= 1;
+
+            const BULLET_SPEED: f32 = 3.0;
+            let (mov, pos) = match &self.facing[..] {
+                "front" => (Movement::Down, (self.hitbox.x + 1.0, self.hitbox.y + 8.0)),
+                "back" => (Movement::Up, (self.hitbox.x + 6.0, self.hitbox.y + 9.0)),
+                "left" => (Movement::Left, (self.hitbox.x, self.hitbox.y + 7.0)),
+                "right" => (Movement::Right, (self.hitbox.x + 11.0, self.hitbox.y + 7.0)),
+                _ => (Movement::Down, (0.0, 0.0))
+            };
+
+            let bullet = Bullet::new(
+                ctx,
+                BULLET_SPEED,
+                mov,
+                Rect::new(pos.0, pos.1, 1.0, 1.0),
+                100
+            ).unwrap();
+
+            self.shots.push_back(bullet);
+
+            const NB_PARTICLES: usize = 10;
+
+            // Spawning particles
+            for _ in 0..NB_PARTICLES {
+                let mut rng = rand::thread_rng();
+                let r = 100;// + (rng.gen_range(0..=80) - 40);
+                let g = 100;// + (rng.gen_range(0..=80) - 40);
+                let b = 100;// +  (rng.gen_range(0..=20) - 10);
+                let color = graphics::Color::from_rgb(r, g, b);
+                // let pos = Point2::new(self.hitbox.x + self.hitbox.w / 2.0,
+                //     self.hitbox.y + self.hitbox.h / 2.0);
+                let angle = rng.gen::<f32>() * 2.0 * std::f32::consts::PI;
+                let size = rng.gen::<f32>() + 0.5; 
+                let life = rng.gen::<f64>() * 2.0 + 1.0;
+                const SPEED: f32 = 0.2;
+                let coinflip = rand::random::<bool>();
+                let rot_dir = if coinflip { -1.0 } else { 1.0 };
+                let rot_speed = rot_dir * 0.05;
+
+                self.particles.push(
+                    Particle::new(Point2::new(pos.0, pos.1), SPEED, rot_speed, angle, life, color, size, ctx)?
+                );
+            }
+        }
+
+        Ok(())
     }
 
     pub fn reset(&mut self, screen_size: (f32, f32)) {
