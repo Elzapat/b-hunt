@@ -3,7 +3,7 @@ mod fabien; use fabien::Fabien;
 mod bertrand; use bertrand::Bertrand;
 mod menu; use menu::Menu;
 mod game_over; use game_over::GameOver;
-pub mod powerup; use powerup::{ Powerup, Powerups };
+pub mod powerup; use powerup::Powerup;
 pub mod utils; use utils::*;
 pub mod bullet;
 pub mod particle;
@@ -34,7 +34,6 @@ struct MainState {
     sec_since_last_bertrand: f64,
     sec_since_last_powerup: f64,
     time_passed: f64,
-    frames: u32,
     wave: u32
 }
 
@@ -57,7 +56,6 @@ impl MainState {
             sec_since_last_bertrand: 0.0,
             sec_since_last_powerup: 0.0,
             time_passed: 0.0,
-            frames: 0,
             wave: 1
         };
         Ok(s)
@@ -67,27 +65,24 @@ impl MainState {
         let fabien_hitbox = self.fabien.get_hitbox();
 
         // Check if any Bertrand is colliding with any of Fabien's bullets
+        // animation_frames: 0,
         // and let the bullet go through if Fabien has the powerup for that
         let mut nb_removed = 0;
         {
-            let mut nb_go_through = 0;
-            if let Some(Powerups::PiercingBullet((_, nb))) = self.fabien.get_active_powerup() {
-                nb_go_through = nb;
-            }
             use std::collections::VecDeque;
             use crate::bullet::Bullet;
+
             let shots: &mut VecDeque<Bullet> = self.fabien.get_shots(); 
             for bullet in shots.iter_mut() {
-                let mut nb_through = nb_go_through as i32;
                 self.bertrands.retain(|bertrand| { 
                     if bertrand.get_hitbox().overlaps(&bullet.get_hitbox()) {
                         nb_removed += 1;
-                        nb_through -= 1;
+                        bullet.hit_something();
                         false 
                     } else { true }
                 });
 
-                if nb_through < 0 { bullet.set_life(0); }
+                if bullet.get_nb_pierce() < 0 { bullet.set_life(0); }
             }
         }
         self.fabien.add_to_score(nb_removed);
@@ -97,25 +92,39 @@ impl MainState {
         // a function on Fabien if they're colliding, and retain won't let me
         // do that.
         // self.bertrands.retain(|bertrand| bertrand.get_hitbox().overlaps(&fabien_hitbox));
-        let mut to_remove: Option<usize> = None;
-        for (i, bertrand) in self.bertrands.iter_mut().enumerate() {
+        for bertrand in self.bertrands.iter_mut() {
+            if bertrand.is_swinging() { continue; }
             if bertrand.get_hitbox().overlaps(&fabien_hitbox) {
                 self.fabien.take_hit();
-                to_remove = Some(i);
+                bertrand.swing();
                 break;
             }
         }
-        if let Some(x) = to_remove { self.bertrands.remove(x); }
+        self.bertrands.retain(|b| !b.is_dead());
 
         // Check if Fabien is colliding with a powerup
+        let mut to_remove: Option<usize> = None;
         for (i, powerup) in self.powerups.iter().enumerate() {
             if powerup.get_hitbox().overlaps(&fabien_hitbox) {
                 self.fabien.activate_powerup(powerup.get_powerup());
                 println!("Powerup activated");
                 to_remove = Some(i);
+                break;
             }
         }
         if let Some(x) = to_remove { self.powerups.remove(x); }
+
+        // Check if a bullet is colliding with a tree
+        let trees = self.map.get_trees();
+        'main: for (i, bullet) in self.fabien.get_shots().iter().enumerate() {
+            for tree in trees.iter() {
+                if bullet.get_hitbox().overlaps(&tree.get_hitbox()) {
+                    to_remove = Some(i); 
+                    break 'main;
+                }
+            }
+        }
+        if let Some(x) = to_remove { self.fabien.get_shots().remove(x); }
     }
 
     fn write_score(&self) -> u32 {
@@ -152,7 +161,7 @@ impl MainState {
             self.wave += 1;
         }
 
-        let bertrand_spawning_rate: f32 = 800.0 / (0.8 * self.wave as f32);
+        let bertrand_spawning_rate: f32 = 500.0 / (0.8 * self.wave as f32);
         self.sec_since_last_bertrand += 1.0 / fps;
 
         let rand_nb = rand(bertrand_spawning_rate) as f64;
@@ -170,7 +179,7 @@ impl MainState {
                    new_bertrand_pos.1 > self.fabien.get_hitbox().y + 50.0) { break; }
             }
             self.bertrands.push(Bertrand::new(ctx, Rect::new(
-                new_bertrand_pos.0, new_bertrand_pos.1, 10.0, 10.0
+                new_bertrand_pos.0, new_bertrand_pos.1, 8.0, 16.0
             ))?);
         }
 
@@ -179,9 +188,9 @@ impl MainState {
 
     fn powerup_spawning(&mut self, ctx: &mut Context, fps: f64) -> GameResult {
         self.sec_since_last_powerup += 1.0 / fps;
-        const POWERUP_SPAWN_RATE: f32 = 100.0;
+        let powerup_spawn_rate: f32 = 6000.0 / (0.2 * self.wave as f32);
 
-        let rand_nb = rand(POWERUP_SPAWN_RATE) as f64;
+        let rand_nb = rand(powerup_spawn_rate) as f64;
 
         if rand_nb - self.sec_since_last_powerup < 0.0 {
             println!("Powerup spawned");
@@ -203,9 +212,9 @@ impl event::EventHandler for MainState {
                 let fps = ggez::timer::fps(ctx);
 
                 self.check_collisions();
-                self.fabien.update(ctx, fps)?;
+                self.fabien.update(ctx, fps, self.map.get_trees())?;
                 for b in self.bertrands.iter_mut() {
-                    b.update((self.fabien.get_hitbox().x, self.fabien.get_hitbox().y))?;
+                    b.update((self.fabien.get_hitbox().x, self.fabien.get_hitbox().y), self.map.get_trees())?;
                 }
                 for p in self.powerups.iter_mut() {
                     p.update(ctx, self.time_passed, fps)?;
@@ -236,12 +245,14 @@ impl event::EventHandler for MainState {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        //println!("FPS: {}", ggez::timer::fps(ctx));
+        // println!("FPS: {}", ggez::timer::fps(ctx));
         graphics::clear(ctx, [0.1, 0.2, 0.3, 1.0].into());
 
         match self.game_state {
             GameState::Menu => {
                 self.map.draw(ctx)?;
+                self.map.draw_trees_before(ctx)?;
+                self.map.draw_trees_after(ctx)?;
                 let shade_rect = graphics::Mesh::new_rectangle(
                     ctx,
                     graphics::DrawMode::fill(),
@@ -259,12 +270,15 @@ impl event::EventHandler for MainState {
                 for b in self.bertrands.iter_mut() {
                     b.draw(ctx)?;
                 }
-                self.fabien.draw(ctx, &self.frames, &self.screen_size)?;
-
-                self.frames = (self.frames + 1) % 40;
+                self.map.draw_trees_before(ctx)?;
+                self.fabien.draw(ctx)?;
+                self.map.draw_trees_after(ctx)?;
+                self.fabien.draw_infos(ctx, self.screen_size)?;
             },
             GameState::GameOver => {
                 self.map.draw(ctx)?;
+                self.map.draw_trees_before(ctx)?;
+                self.map.draw_trees_after(ctx)?;
                 let shade_rect = graphics::Mesh::new_rectangle(
                     ctx,
                     graphics::DrawMode::fill(),
@@ -330,8 +344,11 @@ pub fn main() -> GameResult {
         let mut path = std::path::PathBuf::from(manifest_dir);
         path.push("resources");
         cb = cb.add_resource_path(&path);
+        let mut path2 = path.clone();
         path.push("Fabien");
         cb = cb.add_resource_path(&path);
+        path2.push("Bertrand");
+        cb = cb.add_resource_path(&path2);
     }
 
     let (mut ctx, mut event_loop) = cb.build()?;

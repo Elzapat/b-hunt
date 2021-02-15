@@ -12,6 +12,7 @@ pub struct Bullet {
     moving: Movement,
     hitbox: Rect,
     pos: (f32, f32),
+    nb_pierce: i8,
     life: i32
 }
 
@@ -21,6 +22,7 @@ impl Bullet {
         speed: f32,
         moving: Movement,
         hitbox: Rect,
+        nb_pierce: i8,
         life: i32
     ) -> GameResult<Bullet> {
 
@@ -37,6 +39,7 @@ impl Bullet {
             moving: moving,
             hitbox: hitbox,
             pos: (0.0, 0.0),
+            nb_pierce: nb_pierce, 
             life: life
         };
 
@@ -81,6 +84,14 @@ impl Bullet {
 
     pub fn set_life(&mut self, new_life: i32) {
         self.life = new_life;
+    }
+
+    pub fn hit_something(&mut self) {
+        self.nb_pierce -= 1;
+    }
+
+    pub fn get_nb_pierce(&self) -> i8 {
+        self.nb_pierce
     }
 }
 

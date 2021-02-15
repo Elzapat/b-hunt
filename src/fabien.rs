@@ -10,6 +10,7 @@ use crate::utils::Movement;
 use crate::bullet::Bullet;
 use crate::powerup::Powerups;
 use crate::particle::Particle;
+use crate::map::Tree;
 
 // Fabien is the player
 pub struct Fabien {
@@ -17,6 +18,7 @@ pub struct Fabien {
     bullet_sprite: graphics::Image,
     sandwich_sprite: graphics::Image,
     moldy_sandwich_sprite: graphics::Image,
+    piercing_bullet_sprite: graphics::Image,
     facing: String,
     hitbox: Rect,
     shooting: (bool, u32),
@@ -26,6 +28,7 @@ pub struct Fabien {
     health: u8,
     max_health: u8,
     animation_cycle: u8,
+    animation_frames: u32,
     speed: f32,
     starting_speed: f32,
     active_powerup: Option<Powerups>,
@@ -41,24 +44,24 @@ impl Fabien {
         let hitbox = Rect::new(width / 2.0, height / 2.0, 8.0, 16.0);
         let mut sprites = HashMap::new();
 
-        for _ in 0..4 {
-            for facing in ["front", "back", "right", "left"].iter() {
-                for i in 0..=4 {
-                    let image = graphics::Image::new(ctx, format!("/Fabien_{}_{}.png", facing, i))?;
-                    sprites.insert(format!("{}_{}", facing, i), image);
-                }
+        for facing in ["front", "back", "right", "left"].iter() {
+            for i in 0..=4 {
+                let image = graphics::Image::new(ctx, format!("/Fabien_{}_{}.png", facing, i))?;
+                sprites.insert(format!("{}_{}", facing, i), image);
             }
         }
 
         let bullet_sprite = graphics::Image::new(ctx, "/bullet.png")?;
         let sandwich_sprite = graphics::Image::new(ctx, "/sandwich.png")?;
         let moldy_sandwich_sprite = graphics::Image::new(ctx, "/moldy_sandwich.png")?;
+        let piercing_bullet_sprite = graphics::Image::new(ctx, "/piercing_bullet.png")?;
 
         let fabien = Fabien {
             sprites: sprites,
             bullet_sprite: bullet_sprite,
             sandwich_sprite: sandwich_sprite,
             moldy_sandwich_sprite: moldy_sandwich_sprite,
+            piercing_bullet_sprite: piercing_bullet_sprite,
             facing: "front".to_string(),
             hitbox: hitbox,
             shooting: (false, 0),
@@ -68,6 +71,7 @@ impl Fabien {
             health: 10,
             max_health: 10,
             animation_cycle: 0,
+            animation_frames: 0,
             speed: 0.8,
             starting_speed: 0.8,
             active_powerup: None,
@@ -81,10 +85,36 @@ impl Fabien {
         Ok(fabien)
     }
 
-    pub fn draw(&mut self, ctx: &mut Context, frames: &u32, screen_size: &(f32, f32)) -> GameResult {
-        // Update the invicibility_frames if Fabien is currently invicible
-        if self.invicibility_frames > 0 { self.invicibility_frames -= 1; }
+    pub fn draw(&mut self, ctx: &mut Context) -> GameResult {
+        // Update the character sprite, depending in what direction he's moving
+        if self.movement_queue.len() > 0 && !self.shooting.0 {
+            match self.movement_queue.back().unwrap() {
+                Movement::Up => self.facing = "back".to_string(),
+                Movement::Left => self.facing = "left".to_string(),
+                Movement::Down => self.facing = "front".to_string(),
+                Movement::Right => self.facing = "right".to_string()
+            }
 
+            if self.animation_frames < 10 { self.animation_cycle = 0; }
+            else if self.animation_frames < 20 { self.animation_cycle = 1; }
+            else if self.animation_frames < 30 { self.animation_cycle = 2; }
+            else { self.animation_cycle = 3; }
+
+            self.animation_frames = (self.animation_frames + 1) % 40;
+        } else if self.shooting.0 { self.animation_cycle = 4; }
+        else { self.animation_cycle = 0; }
+
+        for b in self.shots.iter_mut() { b.draw(ctx)?; }
+
+        let sprite = self.sprites.get(&format!("{}_{}", self.facing, self.animation_cycle)).unwrap();
+        let param = graphics::DrawParam::default()
+            .dest(Point2::new(self.hitbox.x - 3.0, self.hitbox.y));
+        graphics::draw(ctx, sprite, param)?;
+
+        Ok(())
+    }
+
+    pub fn draw_infos(&mut self, ctx: &mut Context, screen_size: (f32, f32)) -> GameResult {
         // Update the camera view
         let camera_size: (f32, f32) = (screen_size.0 / 4.0, screen_size.1 / 4.0);
         let mut camera_x = self.hitbox.x - camera_size.0 / 2.0;
@@ -105,43 +135,21 @@ impl Fabien {
             camera_size.0, camera_size.1
         ))?;
 
-        // Update the character sprite, depending in what direction he's moving
-        if self.movement_queue.len() > 0 && !self.shooting.0 {
-            match self.movement_queue.back().unwrap() {
-                Movement::Up => self.facing = "back".to_string(),
-                Movement::Left => self.facing = "left".to_string(),
-                Movement::Down => self.facing = "front".to_string(),
-                Movement::Right => self.facing = "right".to_string()
-            }
-
-            if *frames < 10 {
-                self.animation_cycle = 0;
-            } else if *frames < 20 {
-                self.animation_cycle = 1;
-            } else if *frames < 30 {
-                self.animation_cycle = 2;
-            } else { self.animation_cycle = 3; }
-        } else if self.shooting.0 { self.animation_cycle = 4; }
-        else { self.animation_cycle = 0; }
-
-        if self.shots.len() > 0 {
-            for b in self.shots.iter_mut() {
-                b.draw(ctx)?;
-            }
-        }
-
-        let sprite = self.sprites.get(&format!("{}_{}", self.facing, self.animation_cycle)).unwrap();
-        graphics::draw(ctx, sprite, (Point2::new(self.hitbox.x, self.hitbox.y),))?;
-
         // Drawing remaining ammos
         {
             const BULLET_SCALE: f32 = 0.7;
-            const BULLET_SPACING: f32 = BULLET_SCALE / 2.0;
+            const BULLET_SPACING: f32 = BULLET_SCALE / 1.8;
             let bullet_width = self.bullet_sprite.width() as f32;
             let bullet_height = self.bullet_sprite.height() as f32;
             let bullet_origin = (camera_x + 1.0, camera_y + 1.0);
             let mut param = graphics::DrawParam::default()
                     .scale(Vector2::new(BULLET_SCALE, BULLET_SCALE));
+
+            let bullet_sprite = if let Some(Powerups::PiercingBullet(_)) = self.active_powerup {
+                &self.piercing_bullet_sprite
+            } else {
+                &self.bullet_sprite
+            };
 
             let mut i = 0;
             let mut j = 0;
@@ -150,7 +158,7 @@ impl Fabien {
                         bullet_origin.0 + (bullet_width * BULLET_SPACING) * i as f32,
                         bullet_origin.1 + (bullet_height * BULLET_SPACING) * j as f32
                     ));
-                graphics::draw(ctx, &self.bullet_sprite, param)?;
+                graphics::draw(ctx, bullet_sprite, param)?;
                 if i % 10 == 0 && i != 0 {
                     i = 0;
                     j += 1;
@@ -184,35 +192,118 @@ impl Fabien {
         // Drawing particles
         for p in self.particles.iter() { p.draw(ctx)?; }
 
+        // Draw fps (temp)
+        graphics::draw(ctx, &graphics::Text::new(format!("FPS: {:.2}", ggez::timer::fps(ctx))),
+            graphics::DrawParam::default().dest(Point2::new(camera_x + 1.0, camera_y + camera_size.1 - 7.0))
+            .scale(Vector2::new(0.4, 0.4)))?;
+        // let hitbox = graphics::Mesh::new_rectangle(
+        //     ctx,
+        //     graphics::DrawMode::stroke(0.5),
+        //     self.hitbox,
+        //     graphics::Color::from_rgb(0, 0, 0)
+        // )?;
+        // graphics::draw(ctx, &hitbox, graphics::DrawParam::new().dest(Point2::new(0.0, 0.0)))?;
+
         Ok(())
     }
 
-    pub fn update(&mut self, ctx: &mut Context, fps: f64) -> GameResult {
+    pub fn update(&mut self, ctx: &mut Context, fps: f64, trees: &mut Vec<Tree>) -> GameResult {
+        // Update the invicibility_frames if Fabien is currently invicible
+        if self.invicibility_frames > 0 { self.invicibility_frames -= 1; }
+
         if self.movement_queue.len() > 0 && !self.shooting.0 {
             match self.movement_queue.back() {
                 Some(Movement::Up) => {
                     if self.hitbox.y - self.speed > 0.0 {
                         self.hitbox.y -= self.speed;
-                    }
+                    } else { self.hitbox.y = 0.0; }
                 },
                 Some(Movement::Left) => {
                     if self.hitbox.x - self.speed > 0.0 {
                         self.hitbox.x -= self.speed;
-                    }
+                    } else { self.hitbox.x = 0.0; }
                 },
                 Some(Movement::Down) => {
                     if self.hitbox.y + self.hitbox.h + self.speed < self.map_size.1 {
                         self.hitbox.y += self.speed;
-                    }
+                    } else { self.hitbox.y = self.map_size.1 - self.hitbox.h; }
                 },
                 Some(Movement::Right) => {
                     if self.hitbox.x + self.hitbox.w + self.speed < self.map_size.0 {
                         self.hitbox.x += self.speed;
-                    }
+                    } else { self.hitbox.x = self.map_size.0 - self.hitbox.w }
                 },
                 None => {}
             }
         }
+
+        // Check if Fabien is now in a tree, if so move him back
+        for tree in trees.iter_mut() {
+            // If the tree is more than 50 units away from the player,
+            // we don't consider it.
+            if (tree.get_hitbox().x < self.hitbox.x - 50.0 ||
+                tree.get_hitbox().x > self.hitbox.x + 50.0) &&
+               (tree.get_hitbox().y < self.hitbox.y - 50.0 ||
+                tree.get_hitbox().y > self.hitbox.y + 50.0)
+                { continue; }
+
+            let tree_hitbox = tree.get_hitbox();
+            if self.hitbox.y > tree_hitbox.y {
+                tree.draw_before_fabien(true);
+            } else if !self.hitbox.overlaps(&tree_hitbox) {
+                tree.draw_before_fabien(false);
+            } else {
+                // if previous_hitbox.overlaps(&tree_hitbox) { continue; }
+                match self.movement_queue.back() {
+                    Some(Movement::Up) => {
+                        // self.hitbox.y = tree_hitbox.y + 2.0;
+                        self.hitbox.y += self.speed;
+                    },
+                    Some(Movement::Left) => {
+                        // self.hitbox.x = tree_hitbox.x + tree_hitbox.w + 2.0;
+                        self.hitbox.x += self.speed;
+                    },
+                    Some(Movement::Down) => {
+                        // self.hitbox.y = tree_hitbox.y - self.hitbox.h - 2.0;
+                        self.hitbox.y -= self.speed;
+                    }, 
+                    Some(Movement::Right) => {
+                        // self.hitbox.x = tree_hitbox.x - self.hitbox.w - 2.0;
+                        self.hitbox.x -= self.speed;
+                    },
+                    None => {}
+                }
+            }
+
+            // if self.hitbox.x + self.hitbox.w > tree.get_hitbox().x {
+            //     tree.set_draw(true);
+            // } else if self.hitbox
+        }
+
+        // for tree in tree_hitboxes {
+        //     if self.hitbox.overlaps(tree) {
+        //         match self.movement_queue.back() {
+        //             Some(Movement::Up) => {
+        //             },
+        //             Some(Movement::Left) => {
+        //                 while self.hitbox.overlaps(tree) {
+        //                     self.hitbox.x += self.speed;
+        //                 }
+        //             },
+        //             Some(Movement::Down) => {
+        //                 while self.hitbox.overlaps(tree) {
+        //                     self.hitbox.y -= self.speed;
+        //                 }
+        //             }, 
+        //             Some(Movement::Right) => {
+        //                 while self.hitbox.overlaps(tree) {
+        //                     self.hitbox.x -= self.speed;
+        //                 }
+        //             },
+        //             None => {}
+        //         }
+        //     }
+        // }
 
         // Update the time left of the speed boost and piercing bullets powerups
         match self.active_powerup {
@@ -250,7 +341,7 @@ impl Fabien {
     pub fn take_hit(&mut self) {
         if self.invicibility_frames <= 0 {
             self.health -= 1;
-            self.invicibility_frames = 100;
+            self.invicibility_frames = 40;
         } 
     }
 
@@ -313,11 +404,16 @@ impl Fabien {
                 _ => (Movement::Down, (0.0, 0.0))
             };
 
+            let nb_pierce = if let Some(Powerups::PiercingBullet((_, nb))) = self.active_powerup {
+                nb
+            } else { 0 };
+
             let bullet = Bullet::new(
                 ctx,
                 BULLET_SPEED,
                 mov,
                 Rect::new(pos.0, pos.1, 1.0, 1.0),
+                nb_pierce as i8,
                 100
             ).unwrap();
 
@@ -332,8 +428,6 @@ impl Fabien {
                 let g = 100;// + (rng.gen_range(0..=80) - 40);
                 let b = 100;// +  (rng.gen_range(0..=20) - 10);
                 let color = graphics::Color::from_rgb(r, g, b);
-                // let pos = Point2::new(self.hitbox.x + self.hitbox.w / 2.0,
-                //     self.hitbox.y + self.hitbox.h / 2.0);
                 let angle = rng.gen::<f32>() * 2.0 * std::f32::consts::PI;
                 let size = rng.gen::<f32>() + 0.5; 
                 let life = rng.gen::<f64>() * 2.0 + 1.0;
@@ -377,9 +471,5 @@ impl Fabien {
 
     pub fn get_score(&self) -> u32 {
         self.score
-    }
-    
-    pub fn get_active_powerup(&self) -> Option<Powerups> {
-        self.active_powerup.clone()
     }
 }
