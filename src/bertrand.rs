@@ -24,7 +24,7 @@ impl Bertrand {
 
         for facing in ["front", "back", "right", "left"].iter() {
             for i in 0..=5 {
-                let image = graphics::Image::new(ctx, format!("/Bertrand_{}_{}.png", facing, i))?;
+                let image = graphics::Image::new(ctx, format!("/Bertrand/Bertrand_{}_{}.png", facing, i))?;
                 sprites.insert(format!("{}_{}", facing, i), image);
             }
         }
@@ -36,7 +36,7 @@ impl Bertrand {
             animation_cycle: 0,
             animation_frames: 0,
             swinging: (false, 0),
-            speed: 0.6,
+            speed: 1.0
         };
 
         Ok(bertrand)

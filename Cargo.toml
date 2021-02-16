@@ -6,5 +6,7 @@ edition = "2018"
 
 [dependencies]
 ggez = "0.5.1"
-cgmath = { version = "0.17", features = ["mint"]}
+cgmath = { version = "0.17", features = ["mint"] }
 rand = "0.8.0"
+mysql = "20.1.0"
+dotenv = "0.15.0"

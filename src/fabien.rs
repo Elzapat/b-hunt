@@ -46,7 +46,7 @@ impl Fabien {
 
         for facing in ["front", "back", "right", "left"].iter() {
             for i in 0..=4 {
-                let image = graphics::Image::new(ctx, format!("/Fabien_{}_{}.png", facing, i))?;
+                let image = graphics::Image::new(ctx, format!("/Fabien/Fabien_{}_{}.png", facing, i))?;
                 sprites.insert(format!("{}_{}", facing, i), image);
             }
         }

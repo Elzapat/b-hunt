@@ -1,3 +1,5 @@
 target
 high_score.txt
 game_jolt_things
+.env
+.gj-credentials

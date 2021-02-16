@@ -8,13 +8,15 @@ pub mod utils; use utils::*;
 pub mod bullet;
 pub mod particle;
 
+extern crate mysql;
+extern crate dotenv;
+
 use ggez::{
     event, graphics, Context, GameResult,
     graphics::Rect,
     event::*,
 };
-use std::io::prelude::*;
-use std::fs::OpenOptions;
+use std::fs;
 
 enum GameState {
     Menu,
@@ -24,9 +26,12 @@ enum GameState {
 
 struct MainState {
     screen_size: (f32, f32), 
+    username: String,
+    game_version: String,
+    os: String,
     game_state: GameState,
     menu: Menu,
-    game_over: GameOver,
+    game_over: Option<GameOver>,
     map: Map,
     fabien: Fabien,
     bertrands: Vec<Bertrand>,
@@ -38,15 +43,21 @@ struct MainState {
 }
 
 impl MainState {
-    fn new(ctx: &mut Context, width: f32, height: f32) -> GameResult<MainState> {
+    fn new(ctx: &mut Context, width: f32, height: f32, username: &str, game_version: &str, os: &str)
+        -> GameResult<MainState>
+    {
         let map = Map::new(ctx, width, height)?;
         let fabien = Fabien::new(ctx, width, height)?;
         let menu = Menu::new(ctx)?;
-        let game_over = GameOver::new(ctx, 0, 0)?;
+        let game_over = None;
+
 
         let s = MainState {
             screen_size: (width, height),
             game_state: GameState::Menu,
+            username: username.to_string(),
+            game_version: game_version.to_string(),
+            os: os.to_string(),
             menu: menu,
             game_over: game_over,
             map: map,
@@ -127,32 +138,6 @@ impl MainState {
         if let Some(x) = to_remove { self.fabien.get_shots().remove(x); }
     }
 
-    fn write_score(&self) -> u32 {
-        let mut file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .append(false)
-            .open("high_score.txt")
-            .unwrap();
-
-        let mut high_score = String::new();
-        file.read_to_string(&mut high_score).unwrap();
-
-        let high_score = match high_score.trim().to_string().parse::<u32>() {
-            Ok(cur_high_score) => cur_high_score,
-            Err(_) => 0
-        };
-        
-        if self.fabien.get_score() > high_score {
-            file.set_len(0).unwrap();
-            file.seek(std::io::SeekFrom::Start(0)).unwrap();
-            file.write_all(&self.fabien.get_score().to_string().into_bytes()).unwrap();
-
-            self.fabien.get_score()
-        } else { high_score }
-    }
-
     fn bertrand_spawning(&mut self, ctx: &mut Context, fps: f64) -> GameResult {
         // If a minute passed since the last wave change, the wave changes
         if self.time_passed > (60 * self.wave) as f64 {
@@ -169,14 +154,13 @@ impl MainState {
         if rand_nb - self.sec_since_last_bertrand < 0.0 {
             self.sec_since_last_bertrand = 0.0;
             let mut new_bertrand_pos: (f32, f32);
-            println!("new bertrand spawned");
 
             loop {
                 new_bertrand_pos = (rand(self.map.get_width()), rand(self.map.get_height()));
-                if (new_bertrand_pos.0 < self.fabien.get_hitbox().x - 50.0 ||
-                   new_bertrand_pos.0 > self.fabien.get_hitbox().x + 50.0) &&
-                   (new_bertrand_pos.1 < self.fabien.get_hitbox().y - 50.0 ||
-                   new_bertrand_pos.1 > self.fabien.get_hitbox().y + 50.0) { break; }
+                if (new_bertrand_pos.0 < self.fabien.get_hitbox().x - 200.0 ||
+                   new_bertrand_pos.0 > self.fabien.get_hitbox().x + 200.0) &&
+                   (new_bertrand_pos.1 < self.fabien.get_hitbox().y - 200.0 ||
+                   new_bertrand_pos.1 > self.fabien.get_hitbox().y + 200.0) { break; }
             }
             self.bertrands.push(Bertrand::new(ctx, Rect::new(
                 new_bertrand_pos.0, new_bertrand_pos.1, 8.0, 16.0
@@ -193,7 +177,6 @@ impl MainState {
         let rand_nb = rand(powerup_spawn_rate) as f64;
 
         if rand_nb - self.sec_since_last_powerup < 0.0 {
-            println!("Powerup spawned");
             self.powerups.push(Powerup::new(ctx, self.screen_size)?);
             self.sec_since_last_powerup = 0.0;
         }
@@ -204,6 +187,9 @@ impl MainState {
 
 impl event::EventHandler for MainState {
     fn update(&mut self, ctx: &mut ggez::Context) -> GameResult {
+        const DESIRED_FPS: u32 = 60;
+
+        while ggez::timer::check_update_time(ctx, DESIRED_FPS) {}
         match self.game_state {
             GameState::Menu => {
                 self.menu.update();
@@ -227,9 +213,9 @@ impl event::EventHandler for MainState {
 
                 // Check if Fabien is dead, if so it's Game Over
                 if self.fabien.get_health() <= 0 {
-                    let high_score = self.write_score();
-
-                    self.game_over = GameOver::new(ctx, high_score, self.fabien.get_score())?;
+                    self.game_over = Some(GameOver::new(ctx,
+                        self.fabien.get_score(), self.username.clone(),
+                        self.os.clone(), self.game_version.clone())?);
 
                     graphics::set_screen_coordinates(ctx, 
                         Rect::new(0.0, 0.0, self.screen_size.0, self.screen_size.1))?;
@@ -237,7 +223,7 @@ impl event::EventHandler for MainState {
                 }
             },
             GameState::GameOver => {
-                self.game_over.update();
+                self.game_over.as_ref().unwrap().update();
             }
         }
 
@@ -286,7 +272,7 @@ impl event::EventHandler for MainState {
                     graphics::Color::new(0.0, 0.0, 0.0, 0.9)
                 ).unwrap();
                 graphics::draw(ctx, &shade_rect, graphics::DrawParam::default())?;
-                self.game_over.draw(ctx, self.screen_size)?;
+                self.game_over.as_ref().unwrap().draw(ctx, self.screen_size)?;
             }
         }
 
@@ -330,7 +316,7 @@ pub fn main() -> GameResult {
     cb = cb.window_setup(ggez::conf::WindowSetup {
         title: "B-Hunt".to_string(),
         vsync: true,
-        icon: "/Fabien_front_0.png".to_string(),
+        icon: "/Fabien/Fabien_front_0.png".to_string(),
         ..Default::default()
     });
     let (width, height) = (1000.0, 750.0);
@@ -344,11 +330,11 @@ pub fn main() -> GameResult {
         let mut path = std::path::PathBuf::from(manifest_dir);
         path.push("resources");
         cb = cb.add_resource_path(&path);
-        let mut path2 = path.clone();
-        path.push("Fabien");
-        cb = cb.add_resource_path(&path);
-        path2.push("Bertrand");
-        cb = cb.add_resource_path(&path2);
+        // let mut path2 = path.clone();
+        // path.push("Fabien");
+        // cb = cb.add_resource_path(&path);
+        // path2.push("Bertrand");
+        // cb = cb.add_resource_path(&path2);
     }
 
     let (mut ctx, mut event_loop) = cb.build()?;
@@ -356,6 +342,10 @@ pub fn main() -> GameResult {
     graphics::set_default_filter(&mut ctx, graphics::FilterMode::Nearest);
     //graphics::set_screen_coordinates(&mut ctx, graphics::Rect::new(
     //        0.0, 0.0, 100.0, 100.0))?;
-    let state = &mut MainState::new(&mut ctx, width, height)?;
+
+    let user_info = fs::read_to_string(".gj-credentials")?;
+    let user_info: Vec<&str> = user_info.split('\n').collect();
+
+    let state = &mut MainState::new(&mut ctx, width, height, user_info[1], "0.2.0", "Linux")?;
     event::run(&mut ctx, &mut event_loop, state)
 }
