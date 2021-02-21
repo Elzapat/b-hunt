@@ -9,14 +9,19 @@ pub mod bullet;
 pub mod particle;
 
 extern crate mysql;
-extern crate dotenv;
+extern crate dotenv; use dotenv::dotenv;
+extern crate rand;
+extern crate serde_json;
+extern crate serde;
+extern crate reqwest;
+extern crate sha1;
+extern crate urlencoding;
 
 use ggez::{
     event, graphics, Context, GameResult,
     graphics::Rect,
     event::*,
 };
-use std::fs;
 
 enum GameState {
     Menu,
@@ -26,9 +31,7 @@ enum GameState {
 
 struct MainState {
     screen_size: (f32, f32), 
-    username: String,
-    game_version: String,
-    os: String,
+    stats: Stats,
     game_state: GameState,
     menu: Menu,
     game_over: Option<GameOver>,
@@ -39,25 +42,22 @@ struct MainState {
     sec_since_last_bertrand: f64,
     sec_since_last_powerup: f64,
     time_passed: f64,
+    updated_this_frame: bool,
     wave: u32
 }
 
 impl MainState {
-    fn new(ctx: &mut Context, width: f32, height: f32, username: &str, game_version: &str, os: &str)
-        -> GameResult<MainState>
-    {
-        let map = Map::new(ctx, width, height)?;
-        let fabien = Fabien::new(ctx, width, height)?;
+    fn new(ctx: &mut Context, width: f32, height: f32) -> GameResult<MainState> {
+        let mut map = Map::new(ctx, width, height)?;
+        let fabien = Fabien::new(ctx, width, height, map.get_trees())?;
         let menu = Menu::new(ctx)?;
         let game_over = None;
 
 
         let s = MainState {
             screen_size: (width, height),
+            stats: Stats { bertrand_killed: 0, shots: 0, powerups_activated: 0, hits_taken: 0, time_played: 0 },
             game_state: GameState::Menu,
-            username: username.to_string(),
-            game_version: game_version.to_string(),
-            os: os.to_string(),
             menu: menu,
             game_over: game_over,
             map: map,
@@ -67,6 +67,7 @@ impl MainState {
             sec_since_last_bertrand: 0.0,
             sec_since_last_powerup: 0.0,
             time_passed: 0.0,
+            updated_this_frame: true,
             wave: 1
         };
         Ok(s)
@@ -93,10 +94,14 @@ impl MainState {
                     } else { true }
                 });
 
-                if bullet.get_nb_pierce() < 0 { bullet.set_life(0); }
+                if bullet.get_nb_pierce() < 0 { 
+                    bullet.set_life(0);
+                    self.stats.shots += 1;
+                }
             }
         }
         self.fabien.add_to_score(nb_removed);
+        self.stats.bertrand_killed += nb_removed as u64;
 
         // Check if any Bertrand is colliding with Fabien
         // I think I cannot use the retain methode because I want to execute
@@ -106,7 +111,9 @@ impl MainState {
         for bertrand in self.bertrands.iter_mut() {
             if bertrand.is_swinging() { continue; }
             if bertrand.get_hitbox().overlaps(&fabien_hitbox) {
-                self.fabien.take_hit();
+                if self.fabien.take_hit() {
+                    self.stats.hits_taken += 1;
+                }
                 bertrand.swing();
                 break;
             }
@@ -118,7 +125,7 @@ impl MainState {
         for (i, powerup) in self.powerups.iter().enumerate() {
             if powerup.get_hitbox().overlaps(&fabien_hitbox) {
                 self.fabien.activate_powerup(powerup.get_powerup());
-                println!("Powerup activated");
+                self.stats.powerups_activated += 1;
                 to_remove = Some(i);
                 break;
             }
@@ -146,7 +153,7 @@ impl MainState {
             self.wave += 1;
         }
 
-        let bertrand_spawning_rate: f32 = 500.0 / (0.8 * self.wave as f32);
+        let bertrand_spawning_rate: f32 = 450.0 / (0.8 * self.wave as f32);
         self.sec_since_last_bertrand += 1.0 / fps;
 
         let rand_nb = rand(bertrand_spawning_rate) as f64;
@@ -157,10 +164,21 @@ impl MainState {
 
             loop {
                 new_bertrand_pos = (rand(self.map.get_width()), rand(self.map.get_height()));
+                let mut not_in_tree = true;
+                for tree in self.map.get_trees().iter() {
+                    if tree.get_hitbox().contains(
+                        ggez::mint::Point2 {
+                            x: new_bertrand_pos.0, y: new_bertrand_pos.1 })
+                    {
+                        not_in_tree = false;
+                        break;
+                    }
+                }
                 if (new_bertrand_pos.0 < self.fabien.get_hitbox().x - 200.0 ||
                    new_bertrand_pos.0 > self.fabien.get_hitbox().x + 200.0) &&
                    (new_bertrand_pos.1 < self.fabien.get_hitbox().y - 200.0 ||
-                   new_bertrand_pos.1 > self.fabien.get_hitbox().y + 200.0) { break; }
+                   new_bertrand_pos.1 > self.fabien.get_hitbox().y + 200.0) &&
+                   not_in_tree { break; }
             }
             self.bertrands.push(Bertrand::new(ctx, Rect::new(
                 new_bertrand_pos.0, new_bertrand_pos.1, 8.0, 16.0
@@ -172,7 +190,7 @@ impl MainState {
 
     fn powerup_spawning(&mut self, ctx: &mut Context, fps: f64) -> GameResult {
         self.sec_since_last_powerup += 1.0 / fps;
-        let powerup_spawn_rate: f32 = 6000.0 / (0.2 * self.wave as f32);
+        let powerup_spawn_rate: f32 = 6000.0 / (0.4 * self.wave as f32);
 
         let rand_nb = rand(powerup_spawn_rate) as f64;
 
@@ -187,55 +205,54 @@ impl MainState {
 
 impl event::EventHandler for MainState {
     fn update(&mut self, ctx: &mut ggez::Context) -> GameResult {
-        const DESIRED_FPS: u32 = 60;
-
-        while ggez::timer::check_update_time(ctx, DESIRED_FPS) {}
         match self.game_state {
             GameState::Menu => {
                 self.menu.update();
             },
             GameState::Playing => {
-                let fps = ggez::timer::fps(ctx);
+                const DESIRED_FPS: u32 = 60;
+                while ggez::timer::check_update_time(ctx, DESIRED_FPS) {
+                    self.updated_this_frame = true;
+                    let fps = ggez::timer::fps(ctx);
 
-                self.check_collisions();
-                self.fabien.update(ctx, fps, self.map.get_trees())?;
-                for b in self.bertrands.iter_mut() {
-                    b.update((self.fabien.get_hitbox().x, self.fabien.get_hitbox().y), self.map.get_trees())?;
-                }
-                for p in self.powerups.iter_mut() {
-                    p.update(ctx, self.time_passed, fps)?;
-                }
+                    self.check_collisions();
+                    self.fabien.update(ctx, fps, self.map.get_trees())?;
+                    for b in self.bertrands.iter_mut() {
+                        b.update(ctx, self.fabien.get_hitbox(), self.map.get_trees())?;
+                    }
+                    for p in self.powerups.iter_mut() {
+                        p.update(ctx, self.time_passed, fps)?;
+                    }
 
-                self.time_passed += 1.0 / fps;
+                    self.time_passed += 1.0 / fps;
 
-                self.bertrand_spawning(ctx, fps)?;
-                self.powerup_spawning(ctx, fps)?;
+                    self.bertrand_spawning(ctx, fps)?;
+                    self.powerup_spawning(ctx, fps)?;
 
-                // Check if Fabien is dead, if so it's Game Over
-                if self.fabien.get_health() <= 0 {
-                    self.game_over = Some(GameOver::new(ctx,
-                        self.fabien.get_score(), self.username.clone(),
-                        self.os.clone(), self.game_version.clone())?);
+                    // Check if Fabien is dead, if so it's Game Over
+                    if self.fabien.get_health() <= 0 {
+                        self.stats.time_played += self.time_passed as u64;
+                        self.game_over = Some(GameOver::new(ctx,
+                            self.fabien.get_score(), self.stats, self.screen_size)?);
 
-                    graphics::set_screen_coordinates(ctx, 
-                        Rect::new(0.0, 0.0, self.screen_size.0, self.screen_size.1))?;
-                    self.game_state = GameState::GameOver;
+                        graphics::set_screen_coordinates(ctx, 
+                            Rect::new(0.0, 0.0, self.screen_size.0, self.screen_size.1))?;
+                        self.game_state = GameState::GameOver;
+                    }
                 }
             },
             GameState::GameOver => {
                 self.game_over.as_ref().unwrap().update();
             }
         }
-
         Ok(())
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         // println!("FPS: {}", ggez::timer::fps(ctx));
-        graphics::clear(ctx, [0.1, 0.2, 0.3, 1.0].into());
-
         match self.game_state {
             GameState::Menu => {
+                graphics::clear(ctx, [0.1, 0.2, 0.3, 1.0].into());
                 self.map.draw(ctx)?;
                 self.map.draw_trees_before(ctx)?;
                 self.map.draw_trees_after(ctx)?;
@@ -249,19 +266,21 @@ impl event::EventHandler for MainState {
                 self.menu.draw(ctx, self.screen_size)?;
             },
             GameState::Playing => {
-                self.map.draw(ctx)?;
-                for p in self.powerups.iter() {
-                    p.draw(ctx)?;
-                }
-                for b in self.bertrands.iter_mut() {
-                    b.draw(ctx)?;
-                }
-                self.map.draw_trees_before(ctx)?;
-                self.fabien.draw(ctx)?;
-                self.map.draw_trees_after(ctx)?;
-                self.fabien.draw_infos(ctx, self.screen_size)?;
+                    graphics::clear(ctx, [0.1, 0.2, 0.3, 1.0].into());
+                    self.map.draw(ctx)?;
+                    for p in self.powerups.iter() {
+                        p.draw(ctx)?;
+                    }
+                    for b in self.bertrands.iter_mut() {
+                        b.draw(ctx)?;
+                    }
+                    self.map.draw_trees_before(ctx)?;
+                    self.fabien.draw(ctx)?;
+                    self.map.draw_trees_after(ctx)?;
+                    self.fabien.draw_infos(ctx, self.screen_size)?;
             },
             GameState::GameOver => {
+                graphics::clear(ctx, [0.1, 0.2, 0.3, 1.0].into());
                 self.map.draw(ctx)?;
                 self.map.draw_trees_before(ctx)?;
                 self.map.draw_trees_after(ctx)?;
@@ -286,13 +305,15 @@ impl event::EventHandler for MainState {
                 self.game_state = GameState::Playing;
             },
             GameState::Playing => {
+                if let event::KeyCode::Space = keycode {
+                    if !self.fabien.is_shooting() && self.fabien.get_nb_ammos() > 0 {
+                        self.stats.shots += 1;
+                    }
+                }
                 self.fabien.key_down_event(keycode, ctx).unwrap();
             },
             GameState::GameOver => {
-                self.time_passed = 0.0;
-                self.wave = 1;
-                self.fabien.reset(self.screen_size);
-                self.game_state = GameState::Playing;
+
             }
         }
     } 
@@ -305,13 +326,36 @@ impl event::EventHandler for MainState {
             GameState::Playing => {
                 self.fabien.key_up_event(keycode); 
             },
-            GameState::GameOver => {}
+            GameState::GameOver => {
+
+            }
         }
+    }
+
+    fn mouse_button_down_event(&mut self, _ctx: &mut Context, _button: MouseButton, _x: f32, _y: f32) {
+        match self.game_state {
+            GameState::Menu => {
+
+            },
+            GameState::Playing => {
+
+            },
+            GameState::GameOver => { 
+                self.time_passed = 0.0;
+                self.wave = 1;
+                self.stats = Stats { bertrand_killed: 0, shots: 0,
+                    powerups_activated: 0, hits_taken: 0, time_played: 0 };
+                self.fabien.reset(self.screen_size);
+                self.bertrands.clear();
+                self.game_state = GameState::Playing;
+            }
+        }
+
     }
 }
 
-pub fn main() -> GameResult {
-
+fn main() -> GameResult {
+    dotenv().ok();
     let mut cb = ggez::ContextBuilder::new("B-Hunt", "Elzapat");
     cb = cb.window_setup(ggez::conf::WindowSetup {
         title: "B-Hunt".to_string(),
@@ -330,22 +374,11 @@ pub fn main() -> GameResult {
         let mut path = std::path::PathBuf::from(manifest_dir);
         path.push("resources");
         cb = cb.add_resource_path(&path);
-        // let mut path2 = path.clone();
-        // path.push("Fabien");
-        // cb = cb.add_resource_path(&path);
-        // path2.push("Bertrand");
-        // cb = cb.add_resource_path(&path2);
     }
 
     let (mut ctx, mut event_loop) = cb.build()?;
-    //graphics::set_resizable(&mut ctx, false)?;
     graphics::set_default_filter(&mut ctx, graphics::FilterMode::Nearest);
-    //graphics::set_screen_coordinates(&mut ctx, graphics::Rect::new(
-    //        0.0, 0.0, 100.0, 100.0))?;
 
-    let user_info = fs::read_to_string(".gj-credentials")?;
-    let user_info: Vec<&str> = user_info.split('\n').collect();
-
-    let state = &mut MainState::new(&mut ctx, width, height, user_info[1], "0.2.0", "Linux")?;
+    let state = &mut MainState::new(&mut ctx, width, height)?;
     event::run(&mut ctx, &mut event_loop, state)
 }

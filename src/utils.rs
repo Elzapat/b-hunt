@@ -1,5 +1,14 @@
 use rand::Rng;
 
+#[derive(Debug, Copy, Clone)]
+pub struct Stats {
+    pub bertrand_killed: u64,
+    pub shots: u64,
+    pub powerups_activated: u64,
+    pub hits_taken: u64,
+    pub time_played: u64
+}
+
 #[derive(PartialEq)]
 pub enum Movement {
     Up,

@@ -40,8 +40,21 @@ pub struct Fabien {
 }
 
 impl Fabien {
-    pub fn new(ctx: &mut Context, width: f32, height: f32) -> GameResult<Fabien> {
-        let hitbox = Rect::new(width / 2.0, height / 2.0, 8.0, 16.0);
+    pub fn new(ctx: &mut Context, width: f32, height: f32, trees: &Vec<Tree>) -> GameResult<Fabien> {
+        let mut hitbox = Rect::new(width / 2.0, height / 2.0, 8.0, 16.0);
+        let mut overlaps;
+        'main: loop {
+            overlaps = false;
+            for tree in trees.iter() {
+                if hitbox.overlaps(&tree.get_hitbox()) {
+                    hitbox.x -= 10.0;
+                    hitbox.y -= 10.0;
+                    overlaps = true;
+                    break;
+                }
+            } 
+            if !overlaps { break 'main; }
+        }
         let mut sprites = HashMap::new();
 
         for facing in ["front", "back", "right", "left"].iter() {
@@ -65,7 +78,7 @@ impl Fabien {
             facing: "front".to_string(),
             hitbox: hitbox,
             shooting: (false, 0),
-            ammos: 33,
+            ammos: 44,
             starting_ammos: 33,
             score: 0,
             health: 10,
@@ -338,11 +351,12 @@ impl Fabien {
         Ok(())
     }
 
-    pub fn take_hit(&mut self) {
+    pub fn take_hit(&mut self) -> bool {
         if self.invicibility_frames <= 0 {
             self.health -= 1;
-            self.invicibility_frames = 40;
-        } 
+            self.invicibility_frames = 30;
+            true
+        } else { false }
     }
 
     pub fn add_to_score(&mut self, to_add: u32) {
@@ -373,7 +387,7 @@ impl Fabien {
             KeyCode::Q => self.movement_queue.push_back(Movement::Left),
             KeyCode::S => self.movement_queue.push_back(Movement::Down),
             KeyCode::D => self.movement_queue.push_back(Movement::Right),
-            KeyCode::Space => { self.shoot(ctx)?; },
+            KeyCode::Space => self.shoot(ctx)?,
             _ => {}
         }
 
@@ -445,6 +459,10 @@ impl Fabien {
         Ok(())
     }
 
+    pub fn is_shooting(&self) -> bool {
+        self.shooting.0
+    }
+
     pub fn reset(&mut self, screen_size: (f32, f32)) {
         self.hitbox.x = screen_size.0 / 2.0;
         self.hitbox.y = screen_size.1 / 2.0;
@@ -471,5 +489,9 @@ impl Fabien {
 
     pub fn get_score(&self) -> u32 {
         self.score
+    }
+
+    pub fn get_nb_ammos(&self) -> u32 {
+        self.ammos
     }
 }
