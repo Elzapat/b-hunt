@@ -4,26 +4,24 @@ use ggez::{
     graphics::Rect
 };
 
-use crate::utils::Movement;
-
 pub struct Bullet {
     sprite: graphics::Mesh,
     speed: f32,
-    moving: Movement,
+    angle: f32,
     hitbox: Rect,
     pos: (f32, f32),
     nb_pierce: i8,
-    life: i32
+    life: f32
 }
 
 impl Bullet {
     pub fn new(
         ctx: &mut Context,
         speed: f32,
-        moving: Movement,
+        angle: f32,
         hitbox: Rect,
         nb_pierce: i8,
-        life: i32
+        life: f32
     ) -> GameResult<Bullet> {
 
         let sprite = graphics::Mesh::new_rectangle(
@@ -36,7 +34,7 @@ impl Bullet {
         let bullet = Bullet {
             sprite: sprite,
             speed: speed,
-            moving: moving,
+            angle: angle,
             hitbox: hitbox,
             pos: (0.0, 0.0),
             nb_pierce: nb_pierce, 
@@ -46,30 +44,20 @@ impl Bullet {
         Ok(bullet)
     }
 
-    pub fn update(&mut self) -> bool {
-        match self.moving {
-            Movement::Up => {
-                self.pos.1 -= self.speed;
-                self.hitbox.y -= self.speed;
-            },
-            Movement::Left => {
-                self.pos.0 -= self.speed;
-                self.hitbox.x -= self.speed;
-            },
-            Movement::Down => {
-                self.pos.1 += self.speed;
-                self.hitbox.y += self.speed;
-            },
-            Movement::Right => {
-                self.pos.0 += self.speed;
-                self.hitbox.x += self.speed;
-            }
-        }
+    pub fn update(&mut self, ctx: &mut Context) -> bool {
+        let dt = ggez::timer::delta(ctx).as_secs_f32();
 
-        self.life -= 1;
+        let vel_x = dt * self.speed * self.angle.cos();
+        let vel_y = dt * self.speed * self.angle.sin();
 
-        if self.life <= 0 { false }
-        else { true }
+        self.hitbox.x += vel_x;
+        self.hitbox.y += vel_y;
+        self.pos.0 += vel_x;
+        self.pos.1 += vel_y;
+
+        self.life -= dt;
+
+        !(self.life <= 0.0)
     }
 
     pub fn draw(&mut self, ctx: &mut Context) -> GameResult {
@@ -82,7 +70,7 @@ impl Bullet {
         self.hitbox
     }
 
-    pub fn set_life(&mut self, new_life: i32) {
+    pub fn set_life(&mut self, new_life: f32) {
         self.life = new_life;
     }
 

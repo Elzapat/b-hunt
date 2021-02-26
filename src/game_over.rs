@@ -1,16 +1,19 @@
 use ggez::{
-    graphics, GameResult, Context,
-    graphics::{ Text, TextFragment, Font },
-    nalgebra::Point2
+    GameResult, Context,
+    graphics::Color,
+    nalgebra::Point2,
+    input::mouse::MouseButton
 };
-use crate::utils::Stats;
-use std::{ fs, env };
+use crate::utils::*;
+use crate::button::Button;
+use crate::text::Text;
+use std::collections::HashMap;
 use serde::Deserialize;
 use serde_json::Value;
 use urlencoding::encode;
 
 #[derive(Deserialize, Debug)]
-struct Score{
+struct Score {
     score: String,
     sort: String,
     user: String
@@ -28,98 +31,64 @@ struct ApiResponse {
 }
 
 pub struct GameOver {
-    game_over_text: Text,
-    leaderboard_text: Text,
-    current_score_text: Text,
-    press_a_button_text: Text
+    texts: HashMap<String, Text>,
+    buttons: HashMap<String, Button>
 }
+
+const BUTTON_WIDTH: f32 = 200.0;
+const BUTTON_HEIGHT: f32 = 50.0;
 
 impl GameOver {
     pub fn new(ctx: &mut Context, cur_score: u32, stats: Stats, screen_size: (f32, f32)) -> GameResult<GameOver> {
-        // Font for the text
-        let font = Font::new(ctx, "/Fonts/arial_narrow_7.ttf").unwrap();
+        loading_screen(ctx, screen_size);
 
-        graphics::set_screen_coordinates(ctx, graphics::Rect::new(0.0, 0.0, screen_size.0, screen_size.1))?;
-        // Display a loading text, because accessing the api takes a bit of time
-        let shade_rect = graphics::Mesh::new_rectangle(
-            ctx,
-            graphics::DrawMode::fill(),
-            graphics::Rect::new(0.0, 0.0, screen_size.0, screen_size.1),
-            graphics::Color::new(0.0, 0.0, 0.0, 0.9)
-        ).unwrap();
-        graphics::draw(ctx, &shade_rect, graphics::DrawParam::default())?;
-        let loading_fragment = TextFragment::new("Chargement...")
-            .font(font)
-            .scale(graphics::Scale::uniform(120.0));
-        let loading_text = Text::new(loading_fragment);
-        let dest = Point2::new(
-            screen_size.0 / 2.0 - loading_text.width(ctx) as f32 / 2.0,
-            screen_size.1 / 2.0 - loading_text.height(ctx) as f32 / 2.0
-        );
-        graphics::draw(ctx, &loading_text, graphics::DrawParam::default().dest(dest))?;
-        graphics::present(ctx)?;
-
-        let mut error_message = String::from("");
-        // Get the user info in the .gj_credentials file
-        let user_file = fs::read_to_string(".gj-credentials");
-        let mut user_info = String::from("");
-        match user_file {
-            Ok(info) => user_info = info,
-            Err(e) => error_message = format!("Erreur : {}", e)
+        let leaderboard; let stats_status;
+        match get_credentials() {
+            Ok(cred) => {
+                leaderboard = set_leaderboard(cur_score, cred.clone());
+                stats_status = record_stats(stats, cred.clone());
+            },
+            Err(e) => {
+                leaderboard = e.clone();
+                stats_status = e.clone();
+            }
         }
-        let user_info: Vec<&str> = user_info.split('\n').collect();
-        let username = user_info[1].to_string();
-        let user_token = user_info[2].to_string();
 
-        // Get the useful infos to access the GameJolt API
-        let mut game_id = String::from(""); let mut private_key = String::from("");
-        match env::var("GAME_ID") {
-            Ok(id) => game_id = id,
-            Err(_) => error_message = String::from("Variable manquante (GAME_ID)")
-        }
-        match env::var("PRIVATE_KEY") {
-            Ok(key) => private_key = key,
-            Err(_) => error_message = String::from("Variable manquante (PRIVATE_KEY)")
-        }
-        println!("error_message: {}", error_message);
+        let font_path = "/Fonts/arial_narrow_7.ttf".to_string();
 
-        // Get the leaderboard with the database
-        let leaderboard = set_leaderboard(cur_score, username.clone(),
-                            user_token.clone(), game_id.clone(), private_key.clone());
-        // Record the player's stats for this game
-        let stats_status = record_stats(stats, username.clone(),
-                            user_token.clone(), game_id.clone(), private_key.clone());
-        println!("leaderboard: {}", leaderboard);
-        println!("stats_status: {}", stats_status);
+        let mut game_over_text = Text::new(ctx, String::from("Game Over"), font_path.clone(), 150.0, Color::new(1.0, 1.0, 1.0, 1.0))?;
+        game_over_text.set_pos(Point2::new(screen_size.0 / 2.0 - game_over_text.width(ctx) / 2.0,
+                screen_size.1 / 5.0 - game_over_text.height(ctx) / 2.0));
 
+        let mut leaderboard_text = Text::new(ctx, String::from(leaderboard), font_path.clone(), 50.0, Color::new(1.0, 1.0, 1.0, 1.0))?;
+        leaderboard_text.set_pos(Point2::new(screen_size.0 / 2.0 - leaderboard_text.width(ctx) / 2.0,
+                screen_size.1 / 2.4 - game_over_text.height(ctx) / 2.0));
 
-        let game_over_fragment = TextFragment::new("Game Over")
-            .font(font)
-            .scale(graphics::Scale::uniform(150.0));
-        let game_over_text = Text::new(game_over_fragment);
+        let mut score_text = Text::new(ctx, String::from(format!("Score : {}\n{}", cur_score, stats_status)),
+            font_path.clone(), 30.0, Color::new(1.0, 1.0, 1.0, 1.0))?;
+        score_text.set_pos(Point2::new(screen_size.0 / 2.0 - score_text.width(ctx) / 2.0,
+                screen_size.1 / 1.3 - score_text.height(ctx) / 2.0));
 
-        let leaderboard_fragment = TextFragment::new(leaderboard)
-            .font(font)
-            .scale(graphics::Scale::uniform(50.0));
-        let leaderboard_text = Text::new(leaderboard_fragment);
+        let color_not_hover = Color::from_rgb(255, 255, 255);
+        let color_hover = Color::from_rgb(160, 160, 160);
 
-        let current_score_fragment = TextFragment::new(format!("Votre score pour cette partie : {}\n{}",
-                                                                    cur_score, stats_status))
-            .font(font)
-            .scale(graphics::Scale::uniform(30.0));
-        let current_score_text = Text::new(current_score_fragment);
+        let menu_button = Button::new(ctx, BUTTON_WIDTH, BUTTON_HEIGHT, screen_size.0 / 4.0 - BUTTON_WIDTH / 2.0,
+            screen_size.1 / 1.1 - BUTTON_HEIGHT / 2.0, color_not_hover, color_hover, 5.0, "Menu".to_string())?;
+        let replay_button = Button::new(ctx, BUTTON_WIDTH, BUTTON_HEIGHT, (3.0 * screen_size.0) / 4.0 - BUTTON_WIDTH / 2.0,
+            screen_size.1 / 1.1 - BUTTON_HEIGHT / 2.0, color_not_hover, color_hover, 5.0, "Rejouer".to_string())?;
 
-        let press_a_button_text_fragment = TextFragment::new(
-            "Cliquez n'importe où pour rejouer...")
-            .font(font)
-            .scale(graphics::Scale::uniform(30.0));
-        let press_a_button_text = Text::new(press_a_button_text_fragment);
+        let mut buttons = HashMap::new();
+        buttons.insert("menu".to_string(), menu_button);
+        buttons.insert("replay".to_string(), replay_button);
+
+        let mut texts = HashMap::new();
+        texts.insert("game_over".to_string(), game_over_text);
+        texts.insert("leaderboard".to_string(), leaderboard_text);
+        texts.insert("score".to_string(), score_text);
 
         let game_over = GameOver {
-            game_over_text: game_over_text,
-            leaderboard_text: leaderboard_text,
-            current_score_text: current_score_text,
-            press_a_button_text: press_a_button_text
+            texts: texts,
+            buttons: buttons
         };
 
         Ok(game_over)
@@ -130,41 +99,64 @@ impl GameOver {
 
     }
 
-    pub fn draw(&self, ctx: &mut Context, screen_size: (f32, f32)) -> GameResult {
-        let dest = Point2::new(
-            screen_size.0 / 2.0 - self.game_over_text.width(ctx) as f32 / 2.0,
-            screen_size.1 / 5.0 - self.game_over_text.height(ctx) as f32 / 2.0
-        );
-        let draw_param = graphics::DrawParam::default().dest(dest);
-        graphics::draw(ctx, &self.game_over_text, draw_param)?;
+    pub fn draw(&self, ctx: &mut Context) -> GameResult {
+        for (_, text) in self.texts.iter() {
+            text.draw(ctx)?;
+        }
 
-        let dest = Point2::new(
-            screen_size.0 / 2.0 - self.leaderboard_text.width(ctx) as f32 / 2.0,
-            screen_size.1 / 1.8 - self.leaderboard_text.height(ctx) as f32 / 2.0
-        );
-        let draw_param = graphics::DrawParam::default().dest(dest);
-        graphics::draw(ctx, &self.leaderboard_text, draw_param)?;
-
-        let dest = Point2::new(
-            screen_size.0 / 2.0 - self.current_score_text.width(ctx) as f32 / 2.0,
-            screen_size.1 / 1.2 - self.current_score_text.height(ctx) as f32 / 2.0
-        );
-        let draw_param = graphics::DrawParam::new().dest(dest);
-        graphics::draw(ctx, &self.current_score_text, draw_param)?;
-
-        let dest = Point2::new(
-            screen_size.0 / 2.0 - self.press_a_button_text.width(ctx) as f32 / 2.0,
-            screen_size.1 / 1.1 - self.press_a_button_text.height(ctx) as f32 / 2.0
-        );
-        let draw_param = graphics::DrawParam::new().dest(dest);
-        graphics::draw(ctx, &self.press_a_button_text, draw_param)?;
+        for (_, button) in self.buttons.iter() {
+            button.draw(ctx)?;
+        }
 
         Ok(())
     }
+
+    pub fn mouse_motion_event(&mut self, ctx: &mut Context, x: f32, y: f32) {
+        for (_, button) in self.buttons.iter_mut() {
+            button.mouse_motion_event(ctx, x, y);
+        }
+    }
+
+    pub fn mouse_button_down_event(&self, mouse_button: MouseButton, x: f32, y: f32) -> u8 {
+        if let MouseButton::Left = mouse_button {
+            for (which, button) in self.buttons.iter() {
+                if button.contains(x, y) {
+                    match &which[..] {
+                        "menu" => return 1,
+                        "replay" => return 2,
+                        _ => unreachable!()
+                    }
+                }
+            }
+        }
+        0
+    }
+
+    pub fn resize_event(&mut self, ctx: &mut Context, width: f32, height: f32) {
+        let game_over_text = self.texts.get_mut(&"game_over".to_string()).unwrap();
+        let (t_w, t_h) = (game_over_text.width(ctx), game_over_text.height(ctx));
+        game_over_text.set_pos(Point2::new(width / 2.0 - t_w / 2.0,
+                height / 5.0 - t_h / 2.0));
+
+        let leaderboard_text = self.texts.get_mut(&"leaderboard".to_string()).unwrap();
+        let (t_w, t_h) = (leaderboard_text.width(ctx), leaderboard_text.height(ctx));
+        leaderboard_text.set_pos(Point2::new(width / 2.0 - t_w / 2.0,
+                height / 2.4 - t_h / 2.0));
+
+        let score_text = self.texts.get_mut(&"score".to_string()).unwrap();
+        let (t_w, t_h) = (score_text.width(ctx), score_text.height(ctx));
+        score_text.set_pos(Point2::new(width / 2.0 - t_w / 2.0,
+                height / 1.3 - t_h / 2.0));
+
+        let menu_button = self.buttons.get_mut(&"menu".to_string()).unwrap();
+        menu_button.set_pos(ctx, width / 4.0 - BUTTON_WIDTH / 2.0, height / 1.1 - BUTTON_HEIGHT / 2.0);
+
+        let replay_button = self.buttons.get_mut(&"replay".to_string()).unwrap();
+        replay_button.set_pos(ctx, (3.0 * width) / 4.0 - BUTTON_WIDTH / 2.0, height / 1.1 - BUTTON_HEIGHT / 2.0);
+    }
 }
 
-fn record_stats(stats: Stats, username: String, user_token: String,
-            game_id: String, private_key: String) -> String {
+fn record_stats(stats: Stats, cred: Credentials) -> String {
     // Check if the user has stats in the GameJolt API, if not create it
     let api_url = "https://api.gamejolt.com/api/game/v1_2/data-store/?";
 
@@ -173,9 +165,9 @@ fn record_stats(stats: Stats, username: String, user_token: String,
 
     for key in keys.iter() {
         let mut url = format!("{}game_id={}&key={}&username={}&user_token={}",
-                            api_url, game_id, key, username, user_token); 
+                            api_url, cred.game_id, key, cred.username, cred.user_token); 
         let mut hasher = sha1::Sha1::new();
-        hasher.update(format!("{}{}", url, private_key).as_bytes());
+        hasher.update(format!("{}{}", url, cred.private_key).as_bytes());
         let signature = hasher.digest().to_string();
         url = format!("{}&signature={}", url, signature);
         let res;
@@ -196,9 +188,9 @@ fn record_stats(stats: Stats, username: String, user_token: String,
         if res["response"]["success"] == "false" {
             let mut url = "https://api.gamejolt.com/api/game/v1_2/data-store/set/?".to_string();
             url = format!("{}game_id={}&key={}&data=0&username={}&user_token={}",
-                            url, game_id, key, username, user_token);
+                            url, cred.game_id, key, cred.username, cred.user_token);
             let mut hasher = sha1::Sha1::new();
-            hasher.update(format!("{}{}", url, private_key).as_bytes());
+            hasher.update(format!("{}{}", url, cred.private_key).as_bytes());
             let signature = hasher.digest().to_string();
             url = format!("{}&signature={}", url, signature);
             match reqwest::blocking::get(&url) {
@@ -208,7 +200,7 @@ fn record_stats(stats: Stats, username: String, user_token: String,
         }
     }
 
-    let api_url = format!("https://api.gamejolt.com/api/game/v1_2/batch?game_id={}", game_id);
+    let api_url = format!("https://api.gamejolt.com/api/game/v1_2/batch?game_id={}", cred.game_id);
     let mut global_api_url = api_url.clone();
     let mut user_api_url = api_url.clone();
 
@@ -223,17 +215,17 @@ fn record_stats(stats: Stats, username: String, user_token: String,
             _ => unreachable!()
         };
         let mut global_url = format!("/data-store/update/?game_id={}&key={}&operation=add&value={}",
-                                    game_id, key, value);
+                                    cred.game_id, key, value);
         let mut hasher = sha1::Sha1::new();
-        hasher.update(format!("{}{}", global_url, private_key).as_bytes());
+        hasher.update(format!("{}{}", global_url, cred.private_key).as_bytes());
         let signature = hasher.digest().to_string();
         global_url = format!("{}&signature={}", global_url, signature);
         global_url = encode(&global_url); 
 
         let mut user_url = format!("/data-store/update/?game_id={}&key={}&username={}&user_token={}&operation=add&value={}",
-                                    game_id, key, username, user_token, value);
+                                    cred.game_id, key, cred.username, cred.user_token, value);
         let mut hasher = sha1::Sha1::new();
-        hasher.update(format!("{}{}", user_url, private_key).as_bytes());
+        hasher.update(format!("{}{}", user_url, cred.private_key).as_bytes());
         let signature = hasher.digest().to_string();
         user_url = format!("{}&signature={}", user_url, signature);
         user_url = encode(&user_url);
@@ -243,14 +235,14 @@ fn record_stats(stats: Stats, username: String, user_token: String,
     }
 
     let mut hasher = sha1::Sha1::new();
-    hasher.update(format!("{}{}", global_api_url, private_key).as_bytes());
+    hasher.update(format!("{}&parallel=true{}", global_api_url, cred.private_key).as_bytes());
     let signature = hasher.digest().to_string();
-    global_api_url = format!("{}&signature={}", global_api_url, signature);
+    global_api_url = format!("{}&parallel=true&signature={}", global_api_url, signature);
 
     hasher = sha1::Sha1::new();
-    hasher.update(format!("{}{}", user_api_url, private_key).as_bytes());
+    hasher.update(format!("{}&parallel=true{}", user_api_url, cred.private_key).as_bytes());
     let signature = hasher.digest().to_string();
-    user_api_url = format!("{}&signature={}", user_api_url, signature);
+    user_api_url = format!("{}&parallel=true&signature={}", user_api_url, signature);
 
     // println!("global: {}, user: {}", global_api_url, user_api_url);
 
@@ -266,8 +258,7 @@ fn record_stats(stats: Stats, username: String, user_token: String,
     String::from("Vos statistiqes ont été enregistrées")
 }
 
-fn set_leaderboard(cur_score: u32, username: String, user_token: String,
-            game_id: String, private_key: String) -> String {
+fn set_leaderboard(cur_score: u32, cred: Credentials) -> String {
 
     let mut api_url = "https://api.gamejolt.com/api/game/v1_2/scores/add/?".to_string();
     let table_id = "594910";
@@ -276,8 +267,8 @@ fn set_leaderboard(cur_score: u32, username: String, user_token: String,
 
     // Record the score using the GameJolt API
     api_url = format!("{}game_id={}&username={}&user_token={}&score={}&sort={}&table_id={}",
-                        api_url, game_id, username, user_token, cur_score, cur_score, table_id);
-    hasher.update(format!("{}{}", api_url, private_key).as_bytes());
+                        api_url, cred.game_id, cred.username, cred.user_token, cur_score, cur_score, table_id);
+    hasher.update(format!("{}{}", api_url, cred.private_key).as_bytes());
     let signature = hasher.digest().to_string();
     api_url = format!("{}&signature={}", api_url, signature);
     match reqwest::blocking::get(&api_url) {
@@ -288,7 +279,7 @@ fn set_leaderboard(cur_score: u32, username: String, user_token: String,
     // Get the highest scores from the GameJolt API
     hasher = sha1::Sha1::new();
     let mut api_url = "https://api.gamejolt.com/api/game/v1_2/scores/?game_id=587107&limit=5&table_id=594910".to_string();
-    hasher.update(format!("{}{}", api_url, private_key).as_bytes());
+    hasher.update(format!("{}{}", api_url, cred.private_key).as_bytes());
     let signature = hasher.digest().to_string();
     api_url = format!("{}&signature={}", api_url, signature);
     let res;

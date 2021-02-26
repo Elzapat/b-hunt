@@ -32,7 +32,7 @@ pub struct Map {
 
 impl Map {
     pub fn new(ctx: &mut Context, width: f32, height: f32) -> GameResult<Map> {
-        const NUMBERS_OF: [u16; 2] = [1000, 30];
+        const NUMBERS_OF: [u16; 2] = [3000, 100];
         let environment = ["grass", "tree"];
         let ranges: [u16; 2] = [4, 1];
 

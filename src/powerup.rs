@@ -9,8 +9,8 @@ use crate::particle::Particle;
 // Powerups
 #[derive(Clone)]
 pub enum Powerups {
-    PiercingBullet((f64, u8)),
-    SpeedBoost((f64, f32)),
+    PiercingBullet((f32, u8)),
+    SpeedBoost((f32, f32)),
     Heal(u8),
     AmmoRestock(u32)
 }
@@ -27,17 +27,16 @@ pub struct Powerup {
 impl Powerup {
     pub fn new(ctx: &mut Context, map_size: (f32, f32)) -> GameResult<Powerup> {
         let mut rng = rand::thread_rng();
-        const NB_POWERUPS: u8 = 4;
 
-        let new_powerup = match rng.gen_range(0..NB_POWERUPS) {
-            0 => Powerups::PiercingBullet((rng.gen_range(10..=20) as f64, rng.gen_range(1..=3))),
-            1 => Powerups::SpeedBoost((rng.gen_range(10..=20) as f64, rng.gen_range(13..17) as f32 / 10.0)),
-            2 => Powerups::Heal(rng.gen_range(1..=3)),
-            _ => Powerups::AmmoRestock(rng.gen_range(10..=20))
+        let new_powerup = match rng.gen_range(0..100) {
+            0..=19 => Powerups::PiercingBullet((rng.gen_range(10..=20) as f32, rng.gen_range(1..=3))),
+            20..=49 => Powerups::SpeedBoost((rng.gen_range(15..=20) as f32, rng.gen_range(14..17) as f32 / 10.0)),
+            50..=69 => Powerups::Heal(rng.gen_range(1..=3)),
+            _ => Powerups::AmmoRestock(rng.gen_range(15..=20))
         };
 
         let sprite_path = match new_powerup {
-            Powerups::PiercingBullet(_) => "/piercing_bullet_powerup.png",
+            Powerups::PiercingBullet(_) => "/piercing_bullet.png",
             Powerups::SpeedBoost(_) => "/speed_powerup.png",
             Powerups::Heal(_) => "/sandwich.png",
             Powerups::AmmoRestock(_) => "/bullet.png"
@@ -88,19 +87,19 @@ impl Powerup {
                 self.hitbox.y + self.hitbox.h / 2.0);
             let angle = rng.gen::<f32>() * 2.0 * std::f32::consts::PI;
             let size = rng.gen::<f32>() + 1.0; 
-            let life = rng.gen::<f64>() * 2.0 + 1.0;
-            const SPEED: f32 = 0.05;
+            let life = rng.gen::<f32>() * 2.0 + 1.0;
+            const SPEED: f32 = 5.0;
             let coinflip = rand::random::<bool>();
             let rot_dir = if coinflip { -1.0 } else { 1.0 };
-            let rot_speed = rot_dir * 0.03;
+            let rot_speed = rot_dir * 3.0;
 
             self.particles.push(
                 Particle::new(pos, SPEED, rot_speed, angle, life, color, size, ctx)?
             );
         }
 
-        for p in self.particles.iter_mut() { p.update(fps); }
-        self.particles.retain(|p| p.is_dead());
+        for p in self.particles.iter_mut() { p.update(ctx); }
+        self.particles.retain(|p| !p.is_dead());
 
         Ok(())
     }
@@ -122,5 +121,9 @@ impl Powerup {
 
     pub fn get_powerup(&self) -> Powerups {
         self.powerup.clone()
+    }
+
+    pub fn get_sprite(&self) -> &graphics::Image {
+        &self.sprite
     }
 }

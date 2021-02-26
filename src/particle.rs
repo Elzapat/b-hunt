@@ -11,7 +11,7 @@ pub struct Particle {
     rotation_speed: f32,
     rotation: f32,
     angle: f32,
-    life: (f64, f64)
+    life: (f32, f32)
 }
 
 impl Particle {
@@ -20,7 +20,7 @@ impl Particle {
         speed: f32,
         rotation_speed: f32,
         angle: f32,
-        life: f64,
+        life: f32,
         color: Color,
         size: f32,
         ctx: &mut Context
@@ -46,19 +46,21 @@ impl Particle {
         Ok(particle)
     }
 
-    pub fn update(&mut self, fps: f64) {
-        let vel_x = self.speed * self.angle.cos();
-        let vel_y = self.speed * self.angle.sin();
+    pub fn update(&mut self, ctx: &mut Context) {
+        let dt = ggez::timer::delta(ctx).as_secs_f32();
+
+        let vel_x = dt * self.speed * self.angle.cos();
+        let vel_y = dt * self.speed * self.angle.sin();
         
         self.position.x += vel_x;
         self.position.y += vel_y;
-        self.rotation += self.rotation_speed;
+        self.rotation += dt * self.rotation_speed;
 
-        self.life.1 -= 1.0 / fps;
+        self.life.1 -= ggez::timer::delta(ctx).as_secs_f32();
     }
 
     pub fn draw(&self, ctx: &mut Context) -> GameResult {
-        let scale = (self.life.1 / self.life.0) as f32; 
+        let scale = self.life.1 / self.life.0; 
         let param = graphics::DrawParam::default()
             .dest(self.position)
             .rotation(self.rotation)
@@ -69,6 +71,6 @@ impl Particle {
     }
 
     pub fn is_dead(&self) -> bool {
-        self.life.1 >= 0.0
+        self.life.1 <= 0.0
     }
 }
